@@ -2,10 +2,11 @@ import SwiftUI
 
 struct DisplayManagerApp: App {
     @StateObject private var service = DisplayService()
+    @StateObject private var store = ProfileStore()
 
     var body: some Scene {
         MenuBarExtra("Display Manager", systemImage: "display.2") {
-            MenuContentView(service: service)
+            MenuContentView(service: service, store: store)
         }
         .menuBarExtraStyle(.window)
     }

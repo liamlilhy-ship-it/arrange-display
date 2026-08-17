@@ -9,7 +9,13 @@ Menu bar app for one-click macOS display arrangement profiles.
 open build/DisplayManager.app
 ```
 
-Look for the two-displays icon in the menu bar. Click a profile to apply it; "Restore Previous" undoes the last apply.
+Look for the two-displays icon in the menu bar. Click a profile to apply it — a toast confirms success. "Display Settings…" jumps to System Settings → Displays.
+
+## Custom profiles
+
+"Save Current as Profile…" snapshots the current arrangement — positions, main display, and mirroring state — pinned to each physical display's hardware UUID. Right-click a saved profile to rename or delete it. A profile is grayed out unless exactly its saved displays are connected.
+
+In thumbnails, blue marks the main screen, the built-in display is drawn as a laptop (screen with base bar), and screens are numbered — mirrored displays draw as stacked cards sharing one number.
 
 ## Presets
 
@@ -26,4 +32,6 @@ Presets compute geometry from the actual point sizes of connected displays and s
 .build/release/DisplayManager apply <a|b|c>    # apply a preset
 .build/release/DisplayManager capture <path>   # save current arrangement to JSON
 .build/release/DisplayManager restore <path>   # apply arrangement from JSON
+.build/release/DisplayManager profiles         # list saved custom profiles
+.build/release/DisplayManager profile <name>   # apply a saved custom profile
 ```

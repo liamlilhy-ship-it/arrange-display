@@ -4,7 +4,6 @@ import Foundation
 
 final class DisplayService: ObservableObject {
     @Published private(set) var displays: [DisplayInfo] = []
-    @Published private(set) var previousArrangement: [Placement]?
 
     init() {
         refresh()
@@ -23,9 +22,7 @@ final class DisplayService: ObservableObject {
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(16, &ids, &count) == .success else { return [] }
 
-        return ids.prefix(Int(count)).compactMap { id in
-            // Skip displays that are mirroring another display.
-            guard CGDisplayMirrorsDisplay(id) == kCGNullDirectDisplay else { return nil }
+        return ids.prefix(Int(count)).map { id in
             var uuid = ""
             if let cfUUID = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
                let str = CFUUIDCreateString(nil, cfUUID) {
@@ -34,13 +31,15 @@ final class DisplayService: ObservableObject {
             let screen = NSScreen.screens.first {
                 ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == id
             }
+            let mirrorSource = CGDisplayMirrorsDisplay(id)
             return DisplayInfo(
                 id: id,
                 uuid: uuid,
                 name: screen?.localizedName ?? "Display \(id)",
                 bounds: CGDisplayBounds(id),
                 isBuiltin: CGDisplayIsBuiltin(id) != 0,
-                isMain: CGDisplayIsMain(id) != 0
+                isMain: CGDisplayIsMain(id) != 0,
+                mirrorSourceID: mirrorSource == kCGNullDirectDisplay ? nil : mirrorSource
             )
         }
     }
@@ -59,33 +58,35 @@ final class DisplayService: ObservableObject {
         let placements = target.map {
             Placement(displayID: $0.display.id, x: Int32($0.origin.x.rounded()), y: Int32($0.origin.y.rounded()))
         }
-        let snapshot = displays.map {
-            Placement(displayID: $0.id, x: Int32($0.bounds.origin.x), y: Int32($0.bounds.origin.y))
-        }
         try Self.apply(placements: placements)
-        previousArrangement = snapshot
         refresh()
     }
 
-    func restorePrevious() throws {
-        guard let previous = previousArrangement else { return }
-        try Self.apply(placements: previous)
-        previousArrangement = nil
+    func apply(profile: CustomProfile) throws {
+        guard let placements = profile.placements(matching: displays) else { return }
+        try Self.apply(placements: placements)
         refresh()
     }
 
     static func apply(placements: [Placement]) throws {
         var config: CGDisplayConfigRef?
-        var err = CGBeginDisplayConfiguration(&config)
+        let err = CGBeginDisplayConfiguration(&config)
         guard err == .success, let config else { throw ApplyError.configurationFailed(err) }
-        for p in placements {
-            err = CGConfigureDisplayOrigin(config, p.displayID, p.x, p.y)
+
+        func check(_ err: CGError) throws {
             guard err == .success else {
                 CGCancelDisplayConfiguration(config)
                 throw ApplyError.configurationFailed(err)
             }
         }
-        err = CGCompleteDisplayConfiguration(config, .permanently)
-        guard err == .success else { throw ApplyError.configurationFailed(err) }
+        // Set mirror state for every display first (kCGNullDirectDisplay = extended),
+        // then origins for the extended ones.
+        for p in placements {
+            try check(CGConfigureDisplayMirrorOfDisplay(config, p.displayID, p.mirrorOf ?? kCGNullDirectDisplay))
+        }
+        for p in placements where p.mirrorOf == nil {
+            try check(CGConfigureDisplayOrigin(config, p.displayID, p.x, p.y))
+        }
+        try check(CGCompleteDisplayConfiguration(config, .permanently))
     }
 }

@@ -49,21 +49,12 @@ enum PresetLayouts {
     static func genericPlacements(for preset: Preset) -> [PresetPlacement] {
         func fake(_ id: CGDirectDisplayID, w: CGFloat, h: CGFloat, builtin: Bool) -> DisplayInfo {
             DisplayInfo(id: id, uuid: "", name: "", bounds: CGRect(x: 0, y: 0, width: w, height: h),
-                        isBuiltin: builtin, isMain: false)
+                        isBuiltin: builtin, isMain: false, mirrorSourceID: nil)
         }
         let displays = [fake(1, w: 1920, h: 1080, builtin: false),
                         fake(2, w: 1920, h: 1080, builtin: false),
                         fake(3, w: 1470, h: 956, builtin: true)]
         let subset = Array(displays.prefix(preset.requiredExternalCount)) + [displays[2]]
         return placements(for: preset, displays: subset)!
-    }
-
-    /// True when the current arrangement already matches the preset (within 1pt).
-    static func isActive(_ preset: Preset, displays: [DisplayInfo]) -> Bool {
-        guard let target = placements(for: preset, displays: displays) else { return false }
-        return target.allSatisfy { placement in
-            abs(placement.display.bounds.origin.x - placement.origin.x) <= 1 &&
-            abs(placement.display.bounds.origin.y - placement.origin.y) <= 1
-        }
     }
 }
