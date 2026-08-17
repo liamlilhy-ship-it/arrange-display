@@ -111,19 +111,34 @@ struct MenuContentView: View {
                     showToast("Applied “\(profile.name)”")
                 }
             }
-            .contextMenu {
-                Button("Edit Arrangement…") {
-                    openWindow(id: "profile-editor", value: profile.id)
-                    NSApp.activate(ignoringOtherApps: true)
+            .overlay(alignment: .trailing) {
+                Menu {
+                    profileActions(profile)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.secondary)
                 }
-                Button("Rename…") {
-                    renameText = profile.name
-                    renameTargetID = profile.id
-                }
-                Button("Delete", role: .destructive) {
-                    store.delete(id: profile.id)
-                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .padding(.trailing, 12)
             }
+            .contextMenu { profileActions(profile) }
+        }
+    }
+
+    @ViewBuilder
+    private func profileActions(_ profile: CustomProfile) -> some View {
+        Button("Edit Arrangement…") {
+            openWindow(id: "profile-editor", value: profile.id)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        Button("Rename…") {
+            renameText = profile.name
+            renameTargetID = profile.id
+        }
+        Button("Delete", role: .destructive) {
+            store.delete(id: profile.id)
         }
     }
 
