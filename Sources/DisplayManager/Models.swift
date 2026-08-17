@@ -44,15 +44,16 @@ enum Preset: String, CaseIterable, Identifiable {
     }
 }
 
-/// A profile is either a Layout (no hardware UUIDs — a shape that fits any
-/// monitors matching its display counts) or a Setup (every display pinned to
-/// a physical monitor by hardware UUID, including mirroring).
+/// A profile is a saved screen arrangement. Its one option is monitor
+/// memory: when the displays carry hardware UUIDs the profile applies only
+/// to those exact monitors (and can mirror); without UUIDs it is a shape
+/// that fits any monitors matching its screen counts.
 struct CustomProfile: Codable, Identifiable {
     var id: UUID
     var name: String
     var displays: [SavedDisplay] // main display implied by origin (0,0)
 
-    var isLayout: Bool { displays.allSatisfy { $0.uuid == nil } }
+    var remembersMonitors: Bool { displays.contains { $0.uuid != nil } }
 
     /// Snapshot of the current arrangement, keyed by display hardware UUID.
     static func capture(name: String, displays: [DisplayInfo]) -> CustomProfile {
@@ -71,7 +72,7 @@ struct CustomProfile: Codable, Identifiable {
 
     /// Maps this profile onto the connected displays, or nil when it doesn't fit.
     func placements(matching connected: [DisplayInfo]) -> [Placement]? {
-        isLayout ? layoutPlacements(matching: connected) : setupPlacements(matching: connected)
+        remembersMonitors ? setupPlacements(matching: connected) : layoutPlacements(matching: connected)
     }
 
     /// Setup: exact hardware-UUID match, both directions.
@@ -126,8 +127,9 @@ struct CustomProfile: Codable, Identifiable {
 }
 
 struct SavedDisplay: Codable {
-    /// Hardware UUID pinning this to a physical monitor; nil in Layouts,
-    /// where the display is a role filled by whatever monitor is connected.
+    /// Hardware UUID pinning this to a physical monitor; nil when the
+    /// profile doesn't remember monitors and the display is a role filled
+    /// by whatever monitor is connected.
     let uuid: String?
     let x: Int32, y: Int32
     let width: Int32, height: Int32 // shape/thumbnail geometry

@@ -39,7 +39,7 @@ final class ProfileStore: ObservableObject {
         let defaults = UserDefaults.standard
         if defaults.stringArray(forKey: "seededPresets") != nil {
             let titles = Set(Preset.allCases.map(\.title))
-            profiles.removeAll { titles.contains($0.name) && !$0.isLayout }
+            profiles.removeAll { titles.contains($0.name) && $0.remembersMonitors }
             defaults.removeObject(forKey: "seededPresets")
             persist()
         }

@@ -3,26 +3,34 @@ import SwiftUI
 /// Drag-to-arrange editor for a saved profile, in its own window.
 /// Same visual language as the menu thumbnails: blue = main screen,
 /// laptop = base bar, numbers in reading order, mirrors stacked behind.
+///
+/// The profile's one option — "Remember my exact monitors" — gates the
+/// hardware-dependent features: mirroring needs monitor identity (memory on),
+/// adding/removing screens only makes sense for shapes (memory off).
 struct ProfileEditorView: View {
     @ObservedObject var store: ProfileStore
     let profileID: UUID?
     @Environment(\.dismiss) private var dismiss
 
     struct EditableDisplay: Identifiable {
-        let id = UUID() // editor-local identity; Layout displays have no hardware UUID
-        let hardwareUUID: String?
-        let name: String?
-        let size: CGSize
+        let id = UUID() // editor-local identity
+        var hardwareUUID: String?
+        var name: String?
+        var size: CGSize
         let isBuiltin: Bool
         var origin: CGPoint
+        var mirrorOfID: UUID? // nil = extended screen with a real position
     }
 
-    @State private var displays: [EditableDisplay] // extended only
-    @State private var mirrors: [SavedDisplay] // passed through on save
+    @State private var displays: [EditableDisplay]
+    @State private var profileName: String
+    @State private var remembersMonitors: Bool
     @State private var mainID: UUID?
     @State private var selectedID: UUID?
     @State private var dragAnchor: CGPoint?
     @State private var worldBounds: CGRect
+    @State private var statusNote: String?
+    @State private var connected: [DisplayInfo] = DisplayService.currentDisplays()
 
     private var profile: CustomProfile? {
         store.profiles.first { $0.id == profileID }
@@ -32,23 +40,57 @@ struct ProfileEditorView: View {
         self.store = store
         self.profileID = profileID
         let profile = store.profiles.first { $0.id == profileID }
-        let displays = (profile?.displays ?? []).filter { $0.mirrorSourceUUID == nil }.map {
-            EditableDisplay(hardwareUUID: $0.uuid,
-                            name: $0.name,
-                            size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
-                            isBuiltin: $0.isBuiltin,
-                            origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)))
-        }
-        _displays = State(initialValue: displays)
-        _mirrors = State(initialValue: (profile?.displays ?? []).filter { $0.mirrorSourceUUID != nil })
-        _mainID = State(initialValue: (displays.first { $0.origin == .zero } ?? displays.first)?.id)
-        // Fixed world so the view doesn't rescale mid-drag: initial bounds
-        // padded by the largest display dimension on every side.
-        let bounds = displays.map { CGRect(origin: $0.origin, size: $0.size) }
-            .reduce(CGRect.null) { $0.union($1) }
-        let slack = displays.map { max($0.size.width, $0.size.height) }.max() ?? 0
-        _worldBounds = State(initialValue: bounds.insetBy(dx: -slack, dy: -slack))
+        let loaded = Self.load(profile)
+        _displays = State(initialValue: loaded)
+        _profileName = State(initialValue: profile?.name ?? "")
+        _remembersMonitors = State(initialValue: profile?.remembersMonitors ?? false)
+        _mainID = State(initialValue: Self.initialMainID(of: loaded))
+        _worldBounds = State(initialValue: Self.world(for: loaded))
     }
+
+    // MARK: - State loading / geometry
+
+    private static func load(_ profile: CustomProfile?) -> [EditableDisplay] {
+        guard let profile else { return [] }
+        var result: [EditableDisplay] = profile.displays
+            .filter { $0.mirrorSourceUUID == nil }
+            .map {
+                EditableDisplay(hardwareUUID: $0.uuid, name: $0.name,
+                                size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
+                                isBuiltin: $0.isBuiltin,
+                                origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)),
+                                mirrorOfID: nil)
+            }
+        for d in profile.displays where d.mirrorSourceUUID != nil {
+            let source = result.first { $0.hardwareUUID == d.mirrorSourceUUID }
+            result.append(EditableDisplay(hardwareUUID: d.uuid, name: d.name,
+                                          size: CGSize(width: CGFloat(d.width), height: CGFloat(d.height)),
+                                          isBuiltin: d.isBuiltin,
+                                          origin: source?.origin ?? .zero,
+                                          mirrorOfID: source?.id))
+        }
+        return result
+    }
+
+    private static func initialMainID(of displays: [EditableDisplay]) -> UUID? {
+        (displays.first { $0.mirrorOfID == nil && $0.origin == .zero }
+            ?? displays.first { $0.mirrorOfID == nil })?.id
+    }
+
+    /// World padded by the largest screen dimension so drags have room;
+    /// fixed during a drag to avoid rescale jitter.
+    private static func world(for displays: [EditableDisplay]) -> CGRect {
+        let extended = displays.filter { $0.mirrorOfID == nil }
+        let bounds = extended.map { CGRect(origin: $0.origin, size: $0.size) }
+            .reduce(CGRect.null) { $0.union($1) }
+        let slack = extended.map { max($0.size.width, $0.size.height) }.max() ?? 0
+        return bounds.insetBy(dx: -slack, dy: -slack)
+    }
+
+    private var extendedDisplays: [EditableDisplay] { displays.filter { $0.mirrorOfID == nil } }
+    private var selected: EditableDisplay? { displays.first { $0.id == selectedID } }
+
+    // MARK: - Body
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,7 +104,7 @@ struct ProfileEditorView: View {
                 controls
             }
         }
-        .navigationTitle(profile.map { "Edit “\($0.name)”" } ?? "Edit Arrangement")
+        .navigationTitle(profileName.isEmpty ? "Edit Arrangement" : "Edit “\(profileName)”")
     }
 
     // MARK: - Canvas
@@ -78,18 +120,10 @@ struct ProfileEditorView: View {
             let numbers = readingOrderNumbers()
 
             ZStack {
-                // Mirror cards behind their sources.
-                ForEach(mirrors, id: \.uuid) { mirror in
-                    if let source = displays.first(where: { $0.hardwareUUID == mirror.mirrorSourceUUID }) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.secondary.opacity(0.25))
-                            .stroke(Color.secondary, lineWidth: 1)
-                            .frame(width: source.size.width * scale, height: source.size.height * scale)
-                            .position(x: (source.origin.x + source.size.width / 2) * scale + offset.x + 4,
-                                      y: (source.origin.y + source.size.height / 2) * scale + offset.y - 4)
-                    }
+                ForEach(mirrorCards(), id: \.display.id) { card in
+                    mirrorCardView(card, scale: scale, offset: offset)
                 }
-                ForEach(displays) { display in
+                ForEach(extendedDisplays) { display in
                     displayView(display, number: numbers[display.id] ?? 0, scale: scale, offset: offset)
                 }
             }
@@ -98,6 +132,38 @@ struct ProfileEditorView: View {
             .onTapGesture { selectedID = nil }
         }
         .background(Color(nsColor: .underPageBackgroundColor))
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress { press in nudge(press) }
+    }
+
+    private struct MirrorCard {
+        let display: EditableDisplay
+        let source: EditableDisplay
+        let ordinal: Int // 1st, 2nd… mirror of this source
+    }
+
+    private func mirrorCards() -> [MirrorCard] {
+        var countPerSource: [UUID: Int] = [:]
+        return displays.compactMap { d in
+            guard let sourceID = d.mirrorOfID,
+                  let source = displays.first(where: { $0.id == sourceID }) else { return nil }
+            let ordinal = (countPerSource[sourceID] ?? 0) + 1
+            countPerSource[sourceID] = ordinal
+            return MirrorCard(display: d, source: source, ordinal: ordinal)
+        }
+    }
+
+    private func mirrorCardView(_ card: MirrorCard, scale: CGFloat, offset: CGPoint) -> some View {
+        let isSelected = card.display.id == selectedID
+        let shift = CGFloat(card.ordinal) * 5
+        return RoundedRectangle(cornerRadius: 4)
+            .fill(Color.secondary.opacity(0.25))
+            .stroke(isSelected ? Color.primary : Color.secondary, lineWidth: isSelected ? 2.5 : 1)
+            .frame(width: card.source.size.width * scale, height: card.source.size.height * scale)
+            .position(x: (card.source.origin.x + card.source.size.width / 2) * scale + offset.x + shift,
+                      y: (card.source.origin.y + card.source.size.height / 2) * scale + offset.y - shift)
+            .onTapGesture { selectedID = card.display.id }
     }
 
     private func displayView(_ display: EditableDisplay, number: Int, scale: CGFloat, offset: CGPoint) -> some View {
@@ -131,10 +197,13 @@ struct ProfileEditorView: View {
                     let anchor = dragAnchor ?? display.origin
                     dragAnchor = anchor
                     let raw = CGPoint(x: anchor.x + value.translation.width / scale,
-                                     y: anchor.y + value.translation.height / scale)
+                                      y: anchor.y + value.translation.height / scale)
                     move(display.id, to: snapped(raw, for: display, threshold: 8 / scale))
                 }
-                .onEnded { _ in dragAnchor = nil }
+                .onEnded { _ in
+                    dragAnchor = nil
+                    worldBounds = Self.world(for: displays)
+                }
         )
         .onTapGesture { selectedID = display.id }
     }
@@ -142,51 +211,264 @@ struct ProfileEditorView: View {
     // MARK: - Controls
 
     private var controls: some View {
-        HStack {
-            Text("Drag screens to arrange. Click one to select it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                TextField("Profile name", text: $profileName)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
 
-            Spacer()
+                Text(selectionInfo)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
-            Button("Set as Main") {
-                if let selectedID { mainID = selectedID }
+                Spacer()
+
+                Toggle("Remember my exact monitors", isOn: memoryBinding)
+                    .toggleStyle(.checkbox)
+                    .disabled(!remembersMonitors && !canPinToConnected)
+                    .help(remembersMonitors
+                        ? "Off: keep the shape but let it apply to any monitors (mirroring is removed)."
+                        : canPinToConnected
+                            ? "On: pin this arrangement to the monitors connected right now."
+                            : "Connect monitors matching this shape to turn this on.")
             }
-            .disabled(selectedID == nil || selectedID == mainID)
 
-            Button("Cancel") { dismiss() }
+            HStack(spacing: 8) {
+                if remembersMonitors {
+                    mirrorMenu
+                } else {
+                    Button("Add External") { addExternal() }
+                    Button("Remove Screen") { removeSelected() }
+                        .disabled(!canRemoveSelected)
+                }
 
-            Button("Save") { save() }
-                .keyboardShortcut(.defaultAction)
+                Button("Set as Main") {
+                    if let selectedID { mainID = selectedID }
+                }
+                .disabled(selected == nil || selected?.mirrorOfID != nil || selectedID == mainID)
+
+                if let statusNote {
+                    Text(statusNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button("Apply Now") { applyNow() }
+                    .disabled(currentProfile().placements(matching: connected) == nil)
+                Button("Reset") { reset() }
+                Button("Cancel") { dismiss() }
+                Button("Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(12)
     }
 
-    private func save() {
-        guard let profile, let main = displays.first(where: { $0.id == mainID }) else { return }
-        var saved: [SavedDisplay] = displays.map { d in
-            SavedDisplay(uuid: d.hardwareUUID,
-                         x: Int32((d.origin.x - main.origin.x).rounded()),
-                         y: Int32((d.origin.y - main.origin.y).rounded()),
+    private var selectionInfo: String {
+        guard let selected else { return "Drag screens to arrange. Click one to select it." }
+        let numbers = readingOrderNumbers()
+        if let sourceID = selected.mirrorOfID {
+            return "Mirrors Screen \(numbers[sourceID] ?? 0)\(selected.name.map { " — \($0)" } ?? "")"
+        }
+        let size = "\(Int(selected.size.width))×\(Int(selected.size.height))"
+        return "Screen \(numbers[selected.id] ?? 0) — \(size)\(selected.name.map { " (\($0))" } ?? "")"
+    }
+
+    // MARK: - Mirroring (memory on)
+
+    private var mirrorMenu: some View {
+        Menu("Mirror") {
+            if let selected {
+                if selected.mirrorOfID != nil {
+                    Button("Stop Mirroring") { stopMirroring(selected.id) }
+                } else if selected.id == mainID {
+                    Text("The main screen can't mirror")
+                } else {
+                    let numbers = readingOrderNumbers()
+                    ForEach(extendedDisplays.filter { $0.id != selected.id }) { target in
+                        Button("Mirror onto Screen \(numbers[target.id] ?? 0)") {
+                            mirror(selected.id, onto: target.id)
+                        }
+                    }
+                }
+            }
+        }
+        .fixedSize()
+        .disabled(selected == nil || extendedDisplays.count < 2 && selected?.mirrorOfID == nil)
+    }
+
+    private func mirror(_ id: UUID, onto targetID: UUID) {
+        guard let i = displays.firstIndex(where: { $0.id == id }) else { return }
+        // No chains: mirroring onto a mirror resolves to its source.
+        let root = displays.first { $0.id == targetID }?.mirrorOfID ?? targetID
+        displays[i].mirrorOfID = root
+        // Screens that mirrored the collapsing screen follow it to the new source.
+        for j in displays.indices where displays[j].mirrorOfID == id {
+            displays[j].mirrorOfID = root
+        }
+        worldBounds = Self.world(for: displays)
+        statusNote = nil
+    }
+
+    private func stopMirroring(_ id: UUID) {
+        guard let i = displays.firstIndex(where: { $0.id == id }),
+              let source = displays.first(where: { $0.id == displays[i].mirrorOfID })
+        else { return }
+        displays[i].mirrorOfID = nil
+        displays[i].origin = CGPoint(x: source.origin.x + source.size.width, y: source.origin.y)
+        worldBounds = Self.world(for: displays)
+    }
+
+    // MARK: - Screen management (memory off)
+
+    private func addExternal() {
+        let bounds = extendedDisplays.map { CGRect(origin: $0.origin, size: $0.size) }
+            .reduce(CGRect.null) { $0.union($1) }
+        displays.append(EditableDisplay(hardwareUUID: nil, name: nil,
+                                        size: CGSize(width: 1920, height: 1080),
+                                        isBuiltin: false,
+                                        origin: CGPoint(x: bounds.maxX, y: bounds.minY),
+                                        mirrorOfID: nil))
+        selectedID = displays.last?.id
+        worldBounds = Self.world(for: displays)
+    }
+
+    private var canRemoveSelected: Bool {
+        guard let selected, selected.mirrorOfID == nil else { return false }
+        return selected.id != mainID && extendedDisplays.count > 1
+    }
+
+    private func removeSelected() {
+        guard canRemoveSelected, let selectedID else { return }
+        displays.removeAll { $0.id == selectedID }
+        self.selectedID = nil
+        worldBounds = Self.world(for: displays)
+    }
+
+    // MARK: - Monitor memory toggle
+
+    private var canPinToConnected: Bool {
+        currentProfile().placements(matching: connected) != nil
+    }
+
+    private var memoryBinding: Binding<Bool> {
+        Binding(get: { remembersMonitors }, set: { on in on ? pinToConnected() : forgetMonitors() })
+    }
+
+    private func forgetMonitors() {
+        let hadMirrors = displays.contains { $0.mirrorOfID != nil }
+        displays.removeAll { $0.mirrorOfID != nil }
+        for i in displays.indices {
+            displays[i].hardwareUUID = nil
+            displays[i].name = nil
+        }
+        remembersMonitors = false
+        statusNote = hadMirrors ? "Mirroring removed — it needs specific monitors" : nil
+        worldBounds = Self.world(for: displays)
+    }
+
+    /// Pins the shape onto the currently connected monitors, adopting their
+    /// real identities, sizes, and the shape-mapped positions.
+    private func pinToConnected() {
+        let shape = currentProfile()
+        guard let placements = shape.placements(matching: connected) else { return }
+        let byID = Dictionary(uniqueKeysWithValues: connected.map { ($0.id, $0) })
+        displays = placements.compactMap { p in
+            guard let real = byID[p.displayID] else { return nil }
+            return EditableDisplay(hardwareUUID: real.uuid, name: real.name,
+                                   size: real.bounds.size,
+                                   isBuiltin: real.isBuiltin,
+                                   origin: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)),
+                                   mirrorOfID: nil)
+        }
+        remembersMonitors = true
+        mainID = Self.initialMainID(of: displays)
+        selectedID = nil
+        statusNote = "Pinned to the connected monitors"
+        worldBounds = Self.world(for: displays)
+    }
+
+    // MARK: - Apply / Reset / Save
+
+    /// The editor state as a profile (unsaved), used for Apply Now and pinning.
+    private func currentProfile() -> CustomProfile {
+        let main = displays.first { $0.id == mainID } ?? extendedDisplays.first
+        let shift = main?.origin ?? .zero
+        var saved: [SavedDisplay] = extendedDisplays.map { d in
+            SavedDisplay(uuid: remembersMonitors ? d.hardwareUUID : nil,
+                         x: Int32((d.origin.x - shift.x).rounded()),
+                         y: Int32((d.origin.y - shift.y).rounded()),
                          width: Int32(d.size.width), height: Int32(d.size.height),
                          isBuiltin: d.isBuiltin,
                          mirrorSourceUUID: nil,
                          name: d.name)
         }
-        saved += mirrors.map { m in
-            let source = saved.first { $0.uuid == m.mirrorSourceUUID }
-            return SavedDisplay(uuid: m.uuid,
-                                x: source?.x ?? m.x, y: source?.y ?? m.y,
-                                width: m.width, height: m.height,
-                                isBuiltin: m.isBuiltin,
-                                mirrorSourceUUID: m.mirrorSourceUUID,
-                                name: m.name)
+        for d in displays where d.mirrorOfID != nil {
+            guard let source = displays.first(where: { $0.id == d.mirrorOfID }) else { continue }
+            saved.append(SavedDisplay(uuid: d.hardwareUUID,
+                                      x: Int32((source.origin.x - shift.x).rounded()),
+                                      y: Int32((source.origin.y - shift.y).rounded()),
+                                      width: Int32(d.size.width), height: Int32(d.size.height),
+                                      isBuiltin: d.isBuiltin,
+                                      mirrorSourceUUID: source.hardwareUUID,
+                                      name: d.name))
         }
-        store.update(id: profile.id, displays: saved)
+        return CustomProfile(id: profileID ?? UUID(), name: profileName, displays: saved)
+    }
+
+    private func applyNow() {
+        guard let placements = currentProfile().placements(matching: connected) else { return }
+        do {
+            try DisplayService.apply(placements: placements)
+            connected = DisplayService.currentDisplays()
+            statusNote = "Applied"
+        } catch {
+            statusNote = error.localizedDescription
+        }
+    }
+
+    private func reset() {
+        let loaded = Self.load(profile)
+        displays = loaded
+        profileName = profile?.name ?? ""
+        remembersMonitors = profile?.remembersMonitors ?? false
+        mainID = Self.initialMainID(of: loaded)
+        selectedID = nil
+        statusNote = nil
+        worldBounds = Self.world(for: loaded)
+    }
+
+    private func save() {
+        guard let profile else { return }
+        let name = profileName.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty, name != profile.name {
+            store.rename(id: profile.id, to: name)
+        }
+        store.update(id: profile.id, displays: currentProfile().displays)
         dismiss()
     }
 
-    // MARK: - Geometry helpers
+    // MARK: - Movement helpers
+
+    private func nudge(_ press: KeyPress) -> KeyPress.Result {
+        guard let selected, selected.mirrorOfID == nil else { return .ignored }
+        let step: CGFloat = press.modifiers.contains(.shift) ? 1 : 10
+        let delta: CGPoint
+        switch press.key {
+        case .leftArrow: delta = CGPoint(x: -step, y: 0)
+        case .rightArrow: delta = CGPoint(x: step, y: 0)
+        case .upArrow: delta = CGPoint(x: 0, y: -step)
+        case .downArrow: delta = CGPoint(x: 0, y: step)
+        default: return .ignored
+        }
+        move(selected.id, to: CGPoint(x: selected.origin.x + delta.x,
+                                      y: selected.origin.y + delta.y))
+        return .handled
+    }
 
     private func move(_ id: UUID, to origin: CGPoint) {
         guard let i = displays.firstIndex(where: { $0.id == id }) else { return }
@@ -197,10 +479,10 @@ struct ProfileEditorView: View {
         displays[i].origin = clamped
     }
 
-    /// Magnetic edge snapping against every other display: edges align or
-    /// butt together; centers align too.
+    /// Magnetic edge snapping against every other extended display: edges
+    /// align or butt together; centers align too.
     private func snapped(_ origin: CGPoint, for display: EditableDisplay, threshold: CGFloat) -> CGPoint {
-        let others = displays.filter { $0.id != display.id }
+        let others = extendedDisplays.filter { $0.id != display.id }
             .map { CGRect(origin: $0.origin, size: $0.size) }
         var result = origin
         var bestDX = threshold
@@ -223,7 +505,7 @@ struct ProfileEditorView: View {
     }
 
     private func readingOrderNumbers() -> [UUID: Int] {
-        let sorted = displays.sorted {
+        let sorted = extendedDisplays.sorted {
             $0.origin.y != $1.origin.y ? $0.origin.y < $1.origin.y : $0.origin.x < $1.origin.x
         }
         return Dictionary(uniqueKeysWithValues: sorted.enumerated().map { ($1.id, $0 + 1) })

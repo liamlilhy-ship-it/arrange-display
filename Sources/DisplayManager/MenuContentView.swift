@@ -20,16 +20,12 @@ struct MenuContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("Layouts", caption: "work with any monitors")
+            Text("Profiles")
+                .font(.headline)
+                .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            ForEach(store.profiles.filter(\.isLayout)) { profile in
-                profileRow(profile)
-            }
-
-            sectionHeader("My Setups", caption: "saved from your exact monitors")
-
-            ForEach(store.profiles.filter { !$0.isLayout }) { profile in
+            ForEach(store.profiles) { profile in
                 profileRow(profile)
             }
 
@@ -63,14 +59,6 @@ struct MenuContentView: View {
         }
         .frame(width: 300)
         .overlay(alignment: .bottom) { toastOverlay }
-    }
-
-    private func sectionHeader(_ title: String, caption: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(title).font(.headline)
-            Text(caption).font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 12)
     }
 
     // MARK: - Rows
@@ -118,10 +106,11 @@ struct MenuContentView: View {
         }
     }
 
-    /// Layouts describe what they need; Setups name the hardware they restore.
+    /// Profiles without monitor memory describe what they need; profiles
+    /// with it name the hardware they restore.
     private func subtitle(for profile: CustomProfile) -> String {
         let externals = profile.displays.filter { !$0.isBuiltin }
-        if profile.isLayout {
+        if !profile.remembersMonitors {
             var parts = ["Any \(externals.count) external\(externals.count == 1 ? "" : "s")"]
             if profile.displays.contains(where: \.isBuiltin) { parts.append("laptop") }
             return parts.joined(separator: " + ")
@@ -207,7 +196,7 @@ struct MenuContentView: View {
             Button {
                 isNamingNewProfile = true
             } label: {
-                Label("Save Current as Setup…", systemImage: "plus.circle")
+                Label("Save Current as Profile…", systemImage: "plus.circle")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)

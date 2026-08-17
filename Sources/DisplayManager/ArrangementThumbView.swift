@@ -15,8 +15,6 @@ struct ArrangementThumbView: View {
     }
 
     let items: [Item]
-    /// Layouts (templates) draw with dashed outlines; Setups draw solid.
-    var isTemplate = false
 
     init(placements: [PresetPlacement]) {
         // Reading order: top row first, then left to right.
@@ -56,7 +54,6 @@ struct ArrangementThumbView: View {
                               isMain: false, number: source.number, stack: stack))
         }
         self.items = items
-        isTemplate = profile.isLayout
     }
 
     private static let baseBarHeight: CGFloat = 90 // in display-point space
@@ -91,11 +88,7 @@ struct ArrangementThumbView: View {
                 let fill: Color = item.isMain ? .blue : Color.secondary.opacity(0.35)
                 let path = Path(roundedRect: s, cornerRadius: 2)
                 context.fill(path, with: .color(fill))
-                if isTemplate {
-                    context.stroke(path,
-                                   with: .color(item.isMain ? .white.opacity(0.7) : .secondary),
-                                   style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                } else if !item.isMain {
+                if !item.isMain {
                     context.stroke(path, with: .color(.secondary), lineWidth: 1)
                 }
                 if item.isBuiltin {
