@@ -9,17 +9,18 @@ struct ProfileEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     struct EditableDisplay: Identifiable {
-        let uuid: String
+        let id = UUID() // editor-local identity; Layout displays have no hardware UUID
+        let hardwareUUID: String?
+        let name: String?
         let size: CGSize
         let isBuiltin: Bool
         var origin: CGPoint
-        var id: String { uuid }
     }
 
     @State private var displays: [EditableDisplay] // extended only
     @State private var mirrors: [SavedDisplay] // passed through on save
-    @State private var mainUUID: String?
-    @State private var selectedUUID: String?
+    @State private var mainID: UUID?
+    @State private var selectedID: UUID?
     @State private var dragAnchor: CGPoint?
     @State private var worldBounds: CGRect
 
@@ -32,14 +33,15 @@ struct ProfileEditorView: View {
         self.profileID = profileID
         let profile = store.profiles.first { $0.id == profileID }
         let displays = (profile?.displays ?? []).filter { $0.mirrorSourceUUID == nil }.map {
-            EditableDisplay(uuid: $0.uuid,
+            EditableDisplay(hardwareUUID: $0.uuid,
+                            name: $0.name,
                             size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
                             isBuiltin: $0.isBuiltin,
                             origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)))
         }
         _displays = State(initialValue: displays)
         _mirrors = State(initialValue: (profile?.displays ?? []).filter { $0.mirrorSourceUUID != nil })
-        _mainUUID = State(initialValue: displays.first { $0.origin == .zero }?.uuid ?? displays.first?.uuid)
+        _mainID = State(initialValue: (displays.first { $0.origin == .zero } ?? displays.first)?.id)
         // Fixed world so the view doesn't rescale mid-drag: initial bounds
         // padded by the largest display dimension on every side.
         let bounds = displays.map { CGRect(origin: $0.origin, size: $0.size) }
@@ -78,7 +80,7 @@ struct ProfileEditorView: View {
             ZStack {
                 // Mirror cards behind their sources.
                 ForEach(mirrors, id: \.uuid) { mirror in
-                    if let source = displays.first(where: { $0.uuid == mirror.mirrorSourceUUID }) {
+                    if let source = displays.first(where: { $0.hardwareUUID == mirror.mirrorSourceUUID }) {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color.secondary.opacity(0.25))
                             .stroke(Color.secondary, lineWidth: 1)
@@ -88,19 +90,19 @@ struct ProfileEditorView: View {
                     }
                 }
                 ForEach(displays) { display in
-                    displayView(display, number: numbers[display.uuid] ?? 0, scale: scale, offset: offset)
+                    displayView(display, number: numbers[display.id] ?? 0, scale: scale, offset: offset)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .onTapGesture { selectedUUID = nil }
+            .onTapGesture { selectedID = nil }
         }
         .background(Color(nsColor: .underPageBackgroundColor))
     }
 
     private func displayView(_ display: EditableDisplay, number: Int, scale: CGFloat, offset: CGPoint) -> some View {
-        let isMain = display.uuid == mainUUID
-        let isSelected = display.uuid == selectedUUID
+        let isMain = display.id == mainID
+        let isSelected = display.id == selectedID
         let w = display.size.width * scale
         let h = display.size.height * scale
 
@@ -125,16 +127,16 @@ struct ProfileEditorView: View {
         .gesture(
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
-                    selectedUUID = display.uuid
+                    selectedID = display.id
                     let anchor = dragAnchor ?? display.origin
                     dragAnchor = anchor
                     let raw = CGPoint(x: anchor.x + value.translation.width / scale,
                                      y: anchor.y + value.translation.height / scale)
-                    move(display.uuid, to: snapped(raw, for: display, threshold: 8 / scale))
+                    move(display.id, to: snapped(raw, for: display, threshold: 8 / scale))
                 }
                 .onEnded { _ in dragAnchor = nil }
         )
-        .onTapGesture { selectedUUID = display.uuid }
+        .onTapGesture { selectedID = display.id }
     }
 
     // MARK: - Controls
@@ -148,9 +150,9 @@ struct ProfileEditorView: View {
             Spacer()
 
             Button("Set as Main") {
-                if let selectedUUID { mainUUID = selectedUUID }
+                if let selectedID { mainID = selectedID }
             }
-            .disabled(selectedUUID == nil || selectedUUID == mainUUID)
+            .disabled(selectedID == nil || selectedID == mainID)
 
             Button("Cancel") { dismiss() }
 
@@ -161,14 +163,15 @@ struct ProfileEditorView: View {
     }
 
     private func save() {
-        guard let profile, let main = displays.first(where: { $0.uuid == mainUUID }) else { return }
+        guard let profile, let main = displays.first(where: { $0.id == mainID }) else { return }
         var saved: [SavedDisplay] = displays.map { d in
-            SavedDisplay(uuid: d.uuid,
+            SavedDisplay(uuid: d.hardwareUUID,
                          x: Int32((d.origin.x - main.origin.x).rounded()),
                          y: Int32((d.origin.y - main.origin.y).rounded()),
                          width: Int32(d.size.width), height: Int32(d.size.height),
                          isBuiltin: d.isBuiltin,
-                         mirrorSourceUUID: nil)
+                         mirrorSourceUUID: nil,
+                         name: d.name)
         }
         saved += mirrors.map { m in
             let source = saved.first { $0.uuid == m.mirrorSourceUUID }
@@ -176,7 +179,8 @@ struct ProfileEditorView: View {
                                 x: source?.x ?? m.x, y: source?.y ?? m.y,
                                 width: m.width, height: m.height,
                                 isBuiltin: m.isBuiltin,
-                                mirrorSourceUUID: m.mirrorSourceUUID)
+                                mirrorSourceUUID: m.mirrorSourceUUID,
+                                name: m.name)
         }
         store.update(id: profile.id, displays: saved)
         dismiss()
@@ -184,8 +188,8 @@ struct ProfileEditorView: View {
 
     // MARK: - Geometry helpers
 
-    private func move(_ uuid: String, to origin: CGPoint) {
-        guard let i = displays.firstIndex(where: { $0.uuid == uuid }) else { return }
+    private func move(_ id: UUID, to origin: CGPoint) {
+        guard let i = displays.firstIndex(where: { $0.id == id }) else { return }
         var clamped = origin
         let size = displays[i].size
         clamped.x = min(max(clamped.x, worldBounds.minX), worldBounds.maxX - size.width)
@@ -196,7 +200,7 @@ struct ProfileEditorView: View {
     /// Magnetic edge snapping against every other display: edges align or
     /// butt together; centers align too.
     private func snapped(_ origin: CGPoint, for display: EditableDisplay, threshold: CGFloat) -> CGPoint {
-        let others = displays.filter { $0.uuid != display.uuid }
+        let others = displays.filter { $0.id != display.id }
             .map { CGRect(origin: $0.origin, size: $0.size) }
         var result = origin
         var bestDX = threshold
@@ -218,10 +222,10 @@ struct ProfileEditorView: View {
         return result
     }
 
-    private func readingOrderNumbers() -> [String: Int] {
+    private func readingOrderNumbers() -> [UUID: Int] {
         let sorted = displays.sorted {
             $0.origin.y != $1.origin.y ? $0.origin.y < $1.origin.y : $0.origin.x < $1.origin.x
         }
-        return Dictionary(uniqueKeysWithValues: sorted.enumerated().map { ($1.uuid, $0 + 1) })
+        return Dictionary(uniqueKeysWithValues: sorted.enumerated().map { ($1.id, $0 + 1) })
     }
 }

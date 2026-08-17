@@ -11,19 +11,14 @@ open build/DisplayManager.app
 
 Look for the two-displays icon in the menu bar. Click a profile to apply it — a toast confirms success. "Display Settings…" jumps to System Settings → Displays.
 
-## Custom profiles
+## Layouts vs Setups
 
-"Save Current as Profile…" snapshots the current arrangement — positions, main display, and mirroring state — pinned to each physical display's hardware UUID. Right-click a saved profile to rename or delete it. A profile is grayed out unless exactly its saved displays are connected.
+- **Layouts** are shapes that work with any monitors ("2 externals side by side, laptop below"). They apply to whatever is connected when the external count matches, assigning externals left-to-right. Drawn with dashed thumbnails. Three ship built-in.
+- **Setups** are snapshots of your exact monitors — positions, main display, and mirroring — pinned by hardware UUID. "Save Current as Setup…" creates one; it grays out unless exactly those monitors are connected. Drawn solid.
 
-In thumbnails, blue marks the main screen, the built-in display is drawn as a laptop (screen with base bar), and screens are numbered — mirrored displays draw as stacked cards sharing one number.
+Every row behaves the same: click to apply (a toast confirms), ⋯ or right-click for Edit Arrangement / Rename / Delete. The drag-to-arrange editor supports magnetic edge snapping and Set as Main.
 
-## Presets
-
-- **A — External above, built-in below** (needs 1 external)
-- **B — Dual external, built-in right** (needs 2 externals; bottom-aligned)
-- **C — Dual external, built-in bottom** (needs 2 externals; built-in centered under the seam)
-
-Presets compute geometry from the actual point sizes of connected displays and set the left-most external as the main display. Profiles that don't match the connected display count are grayed out.
+In thumbnails, blue marks the main screen, the built-in display is drawn as a laptop (screen with base bar), and screens are numbered — mirrored displays draw as stacked cards behind their source.
 
 ## CLI (for testing/scripting)
 

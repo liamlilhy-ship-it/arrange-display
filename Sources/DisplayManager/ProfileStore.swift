@@ -32,34 +32,32 @@ final class ProfileStore: ObservableObject {
         }
     }
 
-    /// Materializes each built-in preset into a regular saved profile the
-    /// first time the connected displays match its shape, so preset rows and
-    /// user-saved rows behave identically. Seeds once per preset, ever —
-    /// deleting a seeded profile doesn't resurrect it.
-    private static let seededKey = "seededPresets"
-
-    func seedPresets(from displays: [DisplayInfo]) {
-        var seeded = Set(UserDefaults.standard.stringArray(forKey: Self.seededKey) ?? [])
-        var changed = false
-        for preset in Preset.allCases.reversed() {
-            guard !seeded.contains(preset.rawValue),
-                  let placements = PresetLayouts.placements(for: preset, displays: displays)
-            else { continue }
-            let savedDisplays = placements.map { p in
-                SavedDisplay(uuid: p.display.uuid,
-                             x: Int32(p.origin.x.rounded()), y: Int32(p.origin.y.rounded()),
-                             width: Int32(p.display.bounds.width), height: Int32(p.display.bounds.height),
-                             isBuiltin: p.display.isBuiltin,
-                             mirrorSourceUUID: nil)
-            }
-            profiles.insert(CustomProfile(id: UUID(), name: preset.title, displays: savedDisplays), at: 0)
-            seeded.insert(preset.rawValue)
-            changed = true
-        }
-        if changed {
-            UserDefaults.standard.set(Array(seeded), forKey: Self.seededKey)
+    /// Seeds the three built-in Layouts once, ever — deleting one doesn't
+    /// resurrect it. Also migrates away the hardware-pinned preset copies an
+    /// earlier version seeded (identified by the old flag + preset names).
+    func seedBuiltinLayouts() {
+        let defaults = UserDefaults.standard
+        if defaults.stringArray(forKey: "seededPresets") != nil {
+            let titles = Set(Preset.allCases.map(\.title))
+            profiles.removeAll { titles.contains($0.name) && !$0.isLayout }
+            defaults.removeObject(forKey: "seededPresets")
             persist()
         }
+        guard !defaults.bool(forKey: "seededLayouts") else { return }
+        let layouts = Preset.allCases.map { preset in
+            CustomProfile(id: UUID(), name: preset.title,
+                          displays: PresetLayouts.genericPlacements(for: preset).map { p in
+                              SavedDisplay(uuid: nil,
+                                           x: Int32(p.origin.x.rounded()), y: Int32(p.origin.y.rounded()),
+                                           width: Int32(p.display.bounds.width),
+                                           height: Int32(p.display.bounds.height),
+                                           isBuiltin: p.display.isBuiltin,
+                                           mirrorSourceUUID: nil)
+                          })
+        }
+        profiles.insert(contentsOf: layouts, at: 0)
+        defaults.set(true, forKey: "seededLayouts")
+        persist()
     }
 
     func add(_ profile: CustomProfile) {

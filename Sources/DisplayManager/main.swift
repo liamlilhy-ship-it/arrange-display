@@ -76,7 +76,7 @@ func runCLI(_ args: [String]) -> Int32 {
             let extras = [p.displays.contains { $0.mirrorSourceUUID != nil } ? "mirrored" : nil,
                           p.placements(matching: displays) == nil ? "not applicable now" : nil]
                 .compactMap { $0 }.joined(separator: ", ")
-            print("\(p.name)\t\(p.displays.count) displays\(extras.isEmpty ? "" : "\t(\(extras))")")
+            print("\(p.name)\t\(p.isLayout ? "layout" : "setup")\t\(p.displays.count) displays\(extras.isEmpty ? "" : "\t(\(extras))")")
         }
         return 0
     case "profile":

@@ -15,6 +15,8 @@ struct ArrangementThumbView: View {
     }
 
     let items: [Item]
+    /// Layouts (templates) draw with dashed outlines; Setups draw solid.
+    var isTemplate = false
 
     init(placements: [PresetPlacement]) {
         // Reading order: top row first, then left to right.
@@ -40,7 +42,7 @@ struct ArrangementThumbView: View {
         for (i, d) in extended.enumerated() {
             let rect = CGRect(x: CGFloat(d.x), y: CGFloat(d.y),
                               width: CGFloat(d.width), height: CGFloat(d.height))
-            sourceByUUID[d.uuid] = (i + 1, rect)
+            if let uuid = d.uuid { sourceByUUID[uuid] = (i + 1, rect) }
             items.append(Item(rect: rect, isBuiltin: d.isBuiltin,
                               isMain: d.x == 0 && d.y == 0, number: i + 1, stack: 0))
         }
@@ -54,6 +56,7 @@ struct ArrangementThumbView: View {
                               isMain: false, number: source.number, stack: stack))
         }
         self.items = items
+        isTemplate = profile.isLayout
     }
 
     private static let baseBarHeight: CGFloat = 90 // in display-point space
@@ -88,7 +91,11 @@ struct ArrangementThumbView: View {
                 let fill: Color = item.isMain ? .blue : Color.secondary.opacity(0.35)
                 let path = Path(roundedRect: s, cornerRadius: 2)
                 context.fill(path, with: .color(fill))
-                if !item.isMain {
+                if isTemplate {
+                    context.stroke(path,
+                                   with: .color(item.isMain ? .white.opacity(0.7) : .secondary),
+                                   style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                } else if !item.isMain {
                     context.stroke(path, with: .color(.secondary), lineWidth: 1)
                 }
                 if item.isBuiltin {

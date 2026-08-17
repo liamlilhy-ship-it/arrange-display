@@ -20,12 +20,16 @@ struct MenuContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Presets")
-                .font(.headline)
-                .padding(.horizontal, 12)
+            sectionHeader("Layouts", caption: "work with any monitors")
                 .padding(.top, 10)
 
-            ForEach(store.profiles) { profile in
+            ForEach(store.profiles.filter(\.isLayout)) { profile in
+                profileRow(profile)
+            }
+
+            sectionHeader("My Setups", caption: "saved from your exact monitors")
+
+            ForEach(store.profiles.filter { !$0.isLayout }) { profile in
                 profileRow(profile)
             }
 
@@ -59,8 +63,14 @@ struct MenuContentView: View {
         }
         .frame(width: 300)
         .overlay(alignment: .bottom) { toastOverlay }
-        .onAppear { store.seedPresets(from: service.displays) }
-        .onChange(of: service.displays) { store.seedPresets(from: service.displays) }
+    }
+
+    private func sectionHeader(_ title: String, caption: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(title).font(.headline)
+            Text(caption).font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
     }
 
     // MARK: - Rows
@@ -83,7 +93,7 @@ struct MenuContentView: View {
             let applicable = profile.placements(matching: service.displays) != nil
             profileButton(
                 title: profile.name,
-                subtitle: "\(profile.displays.count) screen\(profile.displays.count == 1 ? "" : "s")",
+                subtitle: subtitle(for: profile),
                 enabled: applicable,
                 thumb: ArrangementThumbView(profile: profile)
             ) {
@@ -106,6 +116,27 @@ struct MenuContentView: View {
             }
             .contextMenu { profileActions(profile) }
         }
+    }
+
+    /// Layouts describe what they need; Setups name the hardware they restore.
+    private func subtitle(for profile: CustomProfile) -> String {
+        let externals = profile.displays.filter { !$0.isBuiltin }
+        if profile.isLayout {
+            var parts = ["Any \(externals.count) external\(externals.count == 1 ? "" : "s")"]
+            if profile.displays.contains(where: \.isBuiltin) { parts.append("laptop") }
+            return parts.joined(separator: " + ")
+        }
+        let names = externals.compactMap {
+            $0.name?.replacingOccurrences(of: #" \(\d+\)$"#, with: "", options: .regularExpression)
+        }
+        guard names.count == externals.count else {
+            return "\(profile.displays.count) screen\(profile.displays.count == 1 ? "" : "s")"
+        }
+        var parts = Dictionary(grouping: names, by: { $0 })
+            .sorted { $0.key < $1.key }
+            .map { $0.value.count > 1 ? "\($0.key) ×\($0.value.count)" : $0.key }
+        if profile.displays.contains(where: \.isBuiltin) { parts.append("MacBook") }
+        return parts.joined(separator: " + ")
     }
 
     @ViewBuilder
@@ -176,7 +207,7 @@ struct MenuContentView: View {
             Button {
                 isNamingNewProfile = true
             } label: {
-                Label("Save Current as Profile…", systemImage: "plus.circle")
+                Label("Save Current as Setup…", systemImage: "plus.circle")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)

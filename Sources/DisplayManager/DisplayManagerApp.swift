@@ -4,7 +4,7 @@ struct DisplayManagerApp: App {
     @StateObject private var service = DisplayService()
     @StateObject private var store = {
         let store = ProfileStore()
-        store.seedPresets(from: DisplayService.currentDisplays())
+        store.seedBuiltinLayouts()
         return store
     }()
 
