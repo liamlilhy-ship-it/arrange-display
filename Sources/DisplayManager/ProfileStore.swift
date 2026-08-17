@@ -37,6 +37,12 @@ final class ProfileStore: ObservableObject {
         persist()
     }
 
+    func update(id: UUID, displays: [SavedDisplay]) {
+        guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[i].displays = displays
+        persist()
+    }
+
     func rename(id: UUID, to name: String) {
         guard let i = profiles.firstIndex(where: { $0.id == id }) else { return }
         profiles[i].name = name

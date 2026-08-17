@@ -122,8 +122,32 @@ func runCLI(_ args: [String]) -> Int32 {
             print("rendered \(views.count) thumbnails to \(dir.path)")
             return 0
         }
+    case "editor-shot":
+        // Debug: render the profile editor for a named profile to PNG.
+        guard args.count == 3 else { return fail("usage: DisplayManager editor-shot <profile> <path>") }
+        let store = ProfileStore()
+        guard let profile = store.profiles.first(where: { $0.name == args[1] }) else {
+            return fail("no profile named '\(args[1])'")
+        }
+        return MainActor.assumeIsolated {
+            let view = ProfileEditorView(store: store, profileID: profile.id)
+                .frame(width: 560, height: 420)
+                .background(Color(white: 0.95))
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            guard let cg = renderer.cgImage,
+                  let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
+            else { return fail("failed to render") }
+            do {
+                try png.write(to: URL(fileURLWithPath: args[2]))
+                print("rendered editor to \(args[2])")
+                return 0
+            } catch {
+                return fail(error.localizedDescription)
+            }
+        }
     default:
-        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name> | thumb <dir>]")
+        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name> | thumb <dir> | editor-shot <profile> <path>]")
     }
 }
 

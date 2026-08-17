@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuContentView: View {
     @ObservedObject var service: DisplayService
     @ObservedObject var store: ProfileStore
+    @Environment(\.openWindow) private var openWindow
     @State private var errorMessage: String?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
@@ -111,6 +112,10 @@ struct MenuContentView: View {
                 }
             }
             .contextMenu {
+                Button("Edit Arrangement…") {
+                    openWindow(id: "profile-editor", value: profile.id)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
                 Button("Rename…") {
                     renameText = profile.name
                     renameTargetID = profile.id
