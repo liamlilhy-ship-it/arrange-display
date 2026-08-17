@@ -57,7 +57,7 @@ struct ArrangementThumbView: View {
     }
 
     private static let baseBarHeight: CGFloat = 90 // in display-point space
-    private static let stackOffset: CGFloat = 5 // canvas px per mirror level
+    private static let stackOffset: CGFloat = 3 // canvas px per mirror level
 
     var body: some View {
         Canvas { context, size in
