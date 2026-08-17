@@ -17,7 +17,22 @@ final class ProfileStore: ObservableObject {
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode([CustomProfile].self, from: data)
         else { return }
-        profiles = decoded
+        profiles = decoded.map(Self.normalized)
+    }
+
+    /// Older files stored mirror links by hardware UUID; convert to the
+    /// structural index form.
+    private static func normalized(_ profile: CustomProfile) -> CustomProfile {
+        var profile = profile
+        for i in profile.displays.indices {
+            if profile.displays[i].mirrorSourceIndex == nil,
+               let uuid = profile.displays[i].mirrorSourceUUID {
+                profile.displays[i].mirrorSourceIndex =
+                    profile.displays.firstIndex { $0.uuid == uuid && $0.mirrorSourceUUID == nil }
+            }
+            profile.displays[i].mirrorSourceUUID = nil
+        }
+        return profile
     }
 
     private func persist() {
@@ -39,7 +54,9 @@ final class ProfileStore: ObservableObject {
         let defaults = UserDefaults.standard
         if defaults.stringArray(forKey: "seededPresets") != nil {
             let titles = Set(Preset.allCases.map(\.title))
-            profiles.removeAll { titles.contains($0.name) && $0.remembersMonitors }
+            profiles.removeAll { p in
+                titles.contains(p.name) && p.displays.contains { $0.uuid != nil }
+            }
             defaults.removeObject(forKey: "seededPresets")
             persist()
         }
@@ -51,8 +68,7 @@ final class ProfileStore: ObservableObject {
                                            x: Int32(p.origin.x.rounded()), y: Int32(p.origin.y.rounded()),
                                            width: Int32(p.display.bounds.width),
                                            height: Int32(p.display.bounds.height),
-                                           isBuiltin: p.display.isBuiltin,
-                                           mirrorSourceUUID: nil)
+                                           isBuiltin: p.display.isBuiltin)
                           })
         }
         profiles.insert(contentsOf: layouts, at: 0)

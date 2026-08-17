@@ -106,25 +106,11 @@ struct MenuContentView: View {
         }
     }
 
-    /// Profiles without monitor memory describe what they need; profiles
-    /// with it name the hardware they restore.
+    /// What the profile needs to fit: its screen counts.
     private func subtitle(for profile: CustomProfile) -> String {
-        let externals = profile.displays.filter { !$0.isBuiltin }
-        if !profile.remembersMonitors {
-            var parts = ["Any \(externals.count) external\(externals.count == 1 ? "" : "s")"]
-            if profile.displays.contains(where: \.isBuiltin) { parts.append("laptop") }
-            return parts.joined(separator: " + ")
-        }
-        let names = externals.compactMap {
-            $0.name?.replacingOccurrences(of: #" \(\d+\)$"#, with: "", options: .regularExpression)
-        }
-        guard names.count == externals.count else {
-            return "\(profile.displays.count) screen\(profile.displays.count == 1 ? "" : "s")"
-        }
-        var parts = Dictionary(grouping: names, by: { $0 })
-            .sorted { $0.key < $1.key }
-            .map { $0.value.count > 1 ? "\($0.key) ×\($0.value.count)" : $0.key }
-        if profile.displays.contains(where: \.isBuiltin) { parts.append("MacBook") }
+        let externals = profile.displays.filter { !$0.isBuiltin }.count
+        var parts = ["\(externals) external\(externals == 1 ? "" : "s")"]
+        if profile.displays.contains(where: \.isBuiltin) { parts.append("laptop") }
         return parts.joined(separator: " + ")
     }
 

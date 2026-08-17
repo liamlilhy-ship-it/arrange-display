@@ -33,25 +33,29 @@ struct ArrangementThumbView: View {
     /// Reconstructed from a saved profile's geometry. Mirrored displays share
     /// their source's position.
     init(profile: CustomProfile) {
-        let extended = profile.displays.filter { $0.mirrorSourceUUID == nil }
-            .sorted { $0.y != $1.y ? $0.y < $1.y : $0.x < $1.x }
-        var sourceByUUID: [String: (number: Int, rect: CGRect)] = [:]
+        let ds = profile.displays
+        let extendedIdx = ds.indices.filter { ds[$0].mirrorSourceIndex == nil }
+            .sorted { ds[$0].y != ds[$1].y ? ds[$0].y < ds[$1].y : ds[$0].x < ds[$1].x }
+        var numberByIndex: [Int: Int] = [:]
+        var rectByIndex: [Int: CGRect] = [:]
         var items: [Item] = []
-        for (i, d) in extended.enumerated() {
+        for (n, i) in extendedIdx.enumerated() {
+            let d = ds[i]
             let rect = CGRect(x: CGFloat(d.x), y: CGFloat(d.y),
                               width: CGFloat(d.width), height: CGFloat(d.height))
-            if let uuid = d.uuid { sourceByUUID[uuid] = (i + 1, rect) }
+            numberByIndex[i] = n + 1
+            rectByIndex[i] = rect
             items.append(Item(rect: rect, isBuiltin: d.isBuiltin,
-                              isMain: d.x == 0 && d.y == 0, number: i + 1, stack: 0))
+                              isMain: d.x == 0 && d.y == 0, number: n + 1, stack: 0))
         }
-        var mirrorCount: [String: Int] = [:]
-        for d in profile.displays {
-            guard let sourceUUID = d.mirrorSourceUUID, let source = sourceByUUID[sourceUUID]
+        var mirrorCount: [Int: Int] = [:]
+        for i in ds.indices {
+            guard let source = ds[i].mirrorSourceIndex, let rect = rectByIndex[source]
             else { continue }
-            let stack = (mirrorCount[sourceUUID] ?? 0) + 1
-            mirrorCount[sourceUUID] = stack
-            items.append(Item(rect: source.rect, isBuiltin: d.isBuiltin,
-                              isMain: false, number: source.number, stack: stack))
+            let stack = (mirrorCount[source] ?? 0) + 1
+            mirrorCount[source] = stack
+            items.append(Item(rect: rect, isBuiltin: ds[i].isBuiltin,
+                              isMain: false, number: numberByIndex[source] ?? 0, stack: stack))
         }
         self.items = items
     }

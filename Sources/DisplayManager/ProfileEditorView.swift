@@ -4,9 +4,9 @@ import SwiftUI
 /// Same visual language as the menu thumbnails: blue = main screen,
 /// laptop = base bar, numbers in reading order, mirrors stacked behind.
 ///
-/// The profile's one option — "Remember my exact monitors" — gates the
-/// hardware-dependent features: mirroring needs monitor identity (memory on),
-/// adding/removing screens only makes sense for shapes (memory off).
+/// Every feature is always available: profiles fit by screen count, so
+/// mirroring is a structural role link and screens can be added or removed
+/// freely. Hardware identity rides along invisibly for exact-monitor restore.
 struct ProfileEditorView: View {
     @ObservedObject var store: ProfileStore
     let profileID: UUID?
@@ -24,7 +24,6 @@ struct ProfileEditorView: View {
 
     @State private var displays: [EditableDisplay]
     @State private var profileName: String
-    @State private var remembersMonitors: Bool
     @State private var mainID: UUID?
     @State private var selectedID: UUID?
     @State private var dragAnchor: CGPoint?
@@ -43,7 +42,6 @@ struct ProfileEditorView: View {
         let loaded = Self.load(profile)
         _displays = State(initialValue: loaded)
         _profileName = State(initialValue: profile?.name ?? "")
-        _remembersMonitors = State(initialValue: profile?.remembersMonitors ?? false)
         _mainID = State(initialValue: Self.initialMainID(of: loaded))
         _worldBounds = State(initialValue: Self.world(for: loaded))
     }
@@ -52,22 +50,18 @@ struct ProfileEditorView: View {
 
     private static func load(_ profile: CustomProfile?) -> [EditableDisplay] {
         guard let profile else { return [] }
-        var result: [EditableDisplay] = profile.displays
-            .filter { $0.mirrorSourceUUID == nil }
-            .map {
-                EditableDisplay(hardwareUUID: $0.uuid, name: $0.name,
-                                size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
-                                isBuiltin: $0.isBuiltin,
-                                origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)),
-                                mirrorOfID: nil)
+        var result: [EditableDisplay] = profile.displays.map {
+            EditableDisplay(hardwareUUID: $0.uuid, name: $0.name,
+                            size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
+                            isBuiltin: $0.isBuiltin,
+                            origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)),
+                            mirrorOfID: nil)
+        }
+        for i in profile.displays.indices {
+            if let source = profile.displays[i].mirrorSourceIndex, result.indices.contains(source) {
+                result[i].mirrorOfID = result[source].id
+                result[i].origin = result[source].origin
             }
-        for d in profile.displays where d.mirrorSourceUUID != nil {
-            let source = result.first { $0.hardwareUUID == d.mirrorSourceUUID }
-            result.append(EditableDisplay(hardwareUUID: d.uuid, name: d.name,
-                                          size: CGSize(width: CGFloat(d.width), height: CGFloat(d.height)),
-                                          isBuiltin: d.isBuiltin,
-                                          origin: source?.origin ?? .zero,
-                                          mirrorOfID: source?.id))
         }
         return result
     }
@@ -224,24 +218,13 @@ struct ProfileEditorView: View {
 
                 Spacer()
 
-                Toggle("Remember my exact monitors", isOn: memoryBinding)
-                    .toggleStyle(.checkbox)
-                    .disabled(!remembersMonitors && !canPinToConnected)
-                    .help(remembersMonitors
-                        ? "Off: keep the shape but let it apply to any monitors (mirroring is removed)."
-                        : canPinToConnected
-                            ? "On: pin this arrangement to the monitors connected right now."
-                            : "Connect monitors matching this shape to turn this on.")
+                Button("Add External") { addExternal() }
+                Button("Remove Screen") { removeSelected() }
+                    .disabled(!canRemoveSelected)
             }
 
             HStack(spacing: 8) {
-                if remembersMonitors {
-                    mirrorMenu
-                } else {
-                    Button("Add External") { addExternal() }
-                    Button("Remove Screen") { removeSelected() }
-                        .disabled(!canRemoveSelected)
-                }
+                mirrorMenu
 
                 Button("Set as Main") {
                     if let selectedID { mainID = selectedID }
@@ -278,7 +261,7 @@ struct ProfileEditorView: View {
         return "Screen \(numbers[selected.id] ?? 0) — \(size)\(selected.name.map { " (\($0))" } ?? "")"
     }
 
-    // MARK: - Mirroring (memory on)
+    // MARK: - Mirroring
 
     private var mirrorMenu: some View {
         Menu("Mirror") {
@@ -323,7 +306,7 @@ struct ProfileEditorView: View {
         worldBounds = Self.world(for: displays)
     }
 
-    // MARK: - Screen management (memory off)
+    // MARK: - Screen management
 
     private func addExternal() {
         let bounds = extendedDisplays.map { CGRect(origin: $0.origin, size: $0.size) }
@@ -349,72 +332,31 @@ struct ProfileEditorView: View {
         worldBounds = Self.world(for: displays)
     }
 
-    // MARK: - Monitor memory toggle
-
-    private var canPinToConnected: Bool {
-        currentProfile().placements(matching: connected) != nil
-    }
-
-    private var memoryBinding: Binding<Bool> {
-        Binding(get: { remembersMonitors }, set: { on in on ? pinToConnected() : forgetMonitors() })
-    }
-
-    private func forgetMonitors() {
-        let hadMirrors = displays.contains { $0.mirrorOfID != nil }
-        displays.removeAll { $0.mirrorOfID != nil }
-        for i in displays.indices {
-            displays[i].hardwareUUID = nil
-            displays[i].name = nil
-        }
-        remembersMonitors = false
-        statusNote = hadMirrors ? "Mirroring removed — it needs specific monitors" : nil
-        worldBounds = Self.world(for: displays)
-    }
-
-    /// Pins the shape onto the currently connected monitors, adopting their
-    /// real identities, sizes, and the shape-mapped positions.
-    private func pinToConnected() {
-        let shape = currentProfile()
-        guard let placements = shape.placements(matching: connected) else { return }
-        let byID = Dictionary(uniqueKeysWithValues: connected.map { ($0.id, $0) })
-        displays = placements.compactMap { p in
-            guard let real = byID[p.displayID] else { return nil }
-            return EditableDisplay(hardwareUUID: real.uuid, name: real.name,
-                                   size: real.bounds.size,
-                                   isBuiltin: real.isBuiltin,
-                                   origin: CGPoint(x: CGFloat(p.x), y: CGFloat(p.y)),
-                                   mirrorOfID: nil)
-        }
-        remembersMonitors = true
-        mainID = Self.initialMainID(of: displays)
-        selectedID = nil
-        statusNote = "Pinned to the connected monitors"
-        worldBounds = Self.world(for: displays)
-    }
-
     // MARK: - Apply / Reset / Save
 
-    /// The editor state as a profile (unsaved), used for Apply Now and pinning.
+    /// The editor state as a profile (unsaved), used for Apply Now and Save.
+    /// Extended screens come first, so a mirror's source index is simply the
+    /// source's position in the extended list.
     private func currentProfile() -> CustomProfile {
         let main = displays.first { $0.id == mainID } ?? extendedDisplays.first
         let shift = main?.origin ?? .zero
-        var saved: [SavedDisplay] = extendedDisplays.map { d in
-            SavedDisplay(uuid: remembersMonitors ? d.hardwareUUID : nil,
+        let extended = extendedDisplays
+        var saved: [SavedDisplay] = extended.map { d in
+            SavedDisplay(uuid: d.hardwareUUID,
                          x: Int32((d.origin.x - shift.x).rounded()),
                          y: Int32((d.origin.y - shift.y).rounded()),
                          width: Int32(d.size.width), height: Int32(d.size.height),
                          isBuiltin: d.isBuiltin,
-                         mirrorSourceUUID: nil,
                          name: d.name)
         }
         for d in displays where d.mirrorOfID != nil {
-            guard let source = displays.first(where: { $0.id == d.mirrorOfID }) else { continue }
+            guard let sourceIndex = extended.firstIndex(where: { $0.id == d.mirrorOfID })
+            else { continue }
             saved.append(SavedDisplay(uuid: d.hardwareUUID,
-                                      x: Int32((source.origin.x - shift.x).rounded()),
-                                      y: Int32((source.origin.y - shift.y).rounded()),
+                                      x: saved[sourceIndex].x, y: saved[sourceIndex].y,
                                       width: Int32(d.size.width), height: Int32(d.size.height),
                                       isBuiltin: d.isBuiltin,
-                                      mirrorSourceUUID: source.hardwareUUID,
+                                      mirrorSourceIndex: sourceIndex,
                                       name: d.name))
         }
         return CustomProfile(id: profileID ?? UUID(), name: profileName, displays: saved)
@@ -435,7 +377,6 @@ struct ProfileEditorView: View {
         let loaded = Self.load(profile)
         displays = loaded
         profileName = profile?.name ?? ""
-        remembersMonitors = profile?.remembersMonitors ?? false
         mainID = Self.initialMainID(of: loaded)
         selectedID = nil
         statusNote = nil

@@ -73,10 +73,10 @@ func runCLI(_ args: [String]) -> Int32 {
         }
     case "profiles":
         for p in ProfileStore().profiles {
-            let extras = [p.displays.contains { $0.mirrorSourceUUID != nil } ? "mirrored" : nil,
+            let extras = [p.displays.contains { $0.mirrorSourceIndex != nil } ? "mirrored" : nil,
                           p.placements(matching: displays) == nil ? "not applicable now" : nil]
                 .compactMap { $0 }.joined(separator: ", ")
-            print("\(p.name)\t\(p.remembersMonitors ? "pinned" : "any-monitors")\t\(p.displays.count) displays\(extras.isEmpty ? "" : "\t(\(extras))")")
+            print("\(p.name)\t\(p.displays.count) displays\(extras.isEmpty ? "" : "\t(\(extras))")")
         }
         return 0
     case "profile":

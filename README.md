@@ -11,12 +11,11 @@ open build/DisplayManager.app
 
 Look for the two-displays icon in the menu bar. Click a profile to apply it — a toast confirms success. "Display Settings…" jumps to System Settings → Displays.
 
-## Layouts vs Setups
+## Profiles
 
-- **Layouts** are shapes that work with any monitors ("2 externals side by side, laptop below"). They apply to whatever is connected when the external count matches, assigning externals left-to-right. Drawn with dashed thumbnails. Three ship built-in.
-- **Setups** are snapshots of your exact monitors — positions, main display, and mirroring — pinned by hardware UUID. "Save Current as Setup…" creates one; it grays out unless exactly those monitors are connected. Drawn solid.
+A profile is a saved screen arrangement — positions, main display, and mirroring. It fits whenever the connected screen counts match (laptop + N externals): externals are assigned left-to-right and positions scale to the real monitor sizes. When the exact monitors it was saved with are connected, each physical monitor silently gets its remembered position instead.
 
-Every row behaves the same: click to apply (a toast confirms), ⋯ or right-click for Edit Arrangement / Rename / Delete. The drag-to-arrange editor supports magnetic edge snapping and Set as Main.
+Click a row to apply (a toast confirms); ⋯ or right-click for Rename / Delete. "Edit Profiles…" opens the manager window: pick a profile in the sidebar and edit it — drag with magnetic snapping, Set as Main, Mirror menu, Add/Remove screens, Apply Now to preview, Reset, arrow-key nudging.
 
 In thumbnails, blue marks the main screen, the built-in display is drawn as a laptop (screen with base bar), and screens are numbered — mirrored displays draw as stacked cards behind their source.
 
