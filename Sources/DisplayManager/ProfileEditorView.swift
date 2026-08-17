@@ -449,7 +449,7 @@ struct ProfileEditorView: View {
             store.rename(id: profile.id, to: name)
         }
         store.update(id: profile.id, displays: currentProfile().displays)
-        dismiss()
+        statusNote = "Saved"
     }
 
     // MARK: - Movement helpers

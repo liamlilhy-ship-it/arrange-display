@@ -41,9 +41,9 @@ struct MenuContentView: View {
             Divider()
 
             HStack {
-                Button("Display Settings…") {
-                    NSWorkspace.shared.open(
-                        URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!)
+                Button("Edit Profiles…") {
+                    openWindow(id: "profiles")
+                    NSApp.activate(ignoringOtherApps: true)
                 }
 
                 Spacer()
@@ -130,10 +130,6 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func profileActions(_ profile: CustomProfile) -> some View {
-        Button("Edit Arrangement…") {
-            openWindow(id: "profile-editor", value: profile.id)
-            NSApp.activate(ignoringOtherApps: true)
-        }
         Button("Rename…") {
             renameText = profile.name
             renameTargetID = profile.id

@@ -14,9 +14,9 @@ struct DisplayManagerApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        WindowGroup("Edit Arrangement", id: "profile-editor", for: UUID.self) { $profileID in
-            ProfileEditorView(store: store, profileID: profileID)
+        Window("Profiles", id: "profiles") {
+            ProfileManagerView(store: store)
         }
-        .defaultSize(width: 740, height: 460)
+        .defaultSize(width: 920, height: 480)
     }
 }
