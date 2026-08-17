@@ -2,13 +2,24 @@ import SwiftUI
 
 struct MenuContentView: View {
     @ObservedObject var service: DisplayService
+    @ObservedObject var store: ProfileStore
     @State private var errorMessage: String?
+    @State private var toastMessage: String?
+    @State private var toastDismissTask: Task<Void, Never>?
+
+    // Inline "save current as profile" naming state.
+    @State private var isNamingNewProfile = false
+    @State private var newProfileName = ""
+
+    // Inline rename state for custom profiles.
+    @State private var renameTargetID: UUID?
+    @State private var renameText = ""
 
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Arrangement Profiles")
+            Text("Presets")
                 .font(.headline)
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
@@ -16,6 +27,18 @@ struct MenuContentView: View {
             ForEach(Preset.allCases) { preset in
                 presetRow(preset)
             }
+
+            Divider().padding(.horizontal, 12)
+
+            Text("My Profiles")
+                .font(.headline)
+                .padding(.horizontal, 12)
+
+            ForEach(store.profiles) { profile in
+                customProfileRow(profile)
+            }
+
+            saveCurrentSection
 
             if let errorMessage {
                 Text(errorMessage)
@@ -27,10 +50,10 @@ struct MenuContentView: View {
             Divider()
 
             HStack {
-                Button("Restore Previous") {
-                    attempt { try service.restorePrevious() }
+                Button("Display Settings…") {
+                    NSWorkspace.shared.open(
+                        URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!)
                 }
-                .disabled(service.previousArrangement == nil)
 
                 Spacer()
 
@@ -44,42 +67,168 @@ struct MenuContentView: View {
             .padding(.bottom, 10)
         }
         .frame(width: 300)
+        .overlay(alignment: .bottom) { toastOverlay }
     }
+
+    // MARK: - Rows
 
     @ViewBuilder
     private func presetRow(_ preset: Preset) -> some View {
         let placements = PresetLayouts.placements(for: preset, displays: service.displays)
-        let isActive = PresetLayouts.isActive(preset, displays: service.displays)
 
-        Button {
-            attempt { try service.apply(preset: preset) }
-        } label: {
+        profileButton(
+            title: preset.title,
+            subtitle: "Needs \(preset.requiredExternalCount) external\(preset.requiredExternalCount == 1 ? "" : "s")",
+            enabled: placements != nil,
+            thumb: ArrangementThumbView(placements: placements ?? PresetLayouts.genericPlacements(for: preset))
+        ) {
+            attempt {
+                try service.apply(preset: preset)
+                showToast("Applied “\(preset.title)”")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func customProfileRow(_ profile: CustomProfile) -> some View {
+        if renameTargetID == profile.id {
             HStack(spacing: 10) {
-                ArrangementThumbView(placements: placements ?? PresetLayouts.genericPlacements(for: preset))
+                ArrangementThumbView(profile: profile)
                     .frame(width: 72, height: 46)
+                TextField("Profile name", text: $renameText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { commitRename(profile) }
+                Button("Save") { commitRename(profile) }
+                    .disabled(renameText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+        } else {
+            let applicable = profile.placements(matching: service.displays) != nil
+            profileButton(
+                title: profile.name,
+                subtitle: profile.hasMirroring ? "Mirrored" : nil,
+                enabled: applicable,
+                thumb: ArrangementThumbView(profile: profile)
+            ) {
+                attempt {
+                    try service.apply(profile: profile)
+                    showToast("Applied “\(profile.name)”")
+                }
+            }
+            .contextMenu {
+                Button("Rename…") {
+                    renameText = profile.name
+                    renameTargetID = profile.id
+                }
+                Button("Delete", role: .destructive) {
+                    store.delete(id: profile.id)
+                }
+            }
+        }
+    }
+
+    private func profileButton(
+        title: String, subtitle: String?, enabled: Bool,
+        thumb: ArrangementThumbView, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                thumb.frame(width: 72, height: 46)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(preset.title)
+                    Text(title)
                         .font(.body)
-                    Text("Needs \(preset.requiredExternalCount) external\(preset.requiredExternalCount == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
-
-                if isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .disabled(placements == nil)
-        .opacity(placements == nil ? 0.4 : 1)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+    }
+
+    // MARK: - Save current as profile
+
+    @ViewBuilder
+    private var saveCurrentSection: some View {
+        if isNamingNewProfile {
+            HStack(spacing: 8) {
+                TextField("Profile name", text: $newProfileName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(commitNewProfile)
+                Button("Save", action: commitNewProfile)
+                    .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel") {
+                    isNamingNewProfile = false
+                    newProfileName = ""
+                }
+            }
+            .padding(.horizontal, 12)
+        } else {
+            Button {
+                isNamingNewProfile = true
+            } label: {
+                Label("Save Current as Profile…", systemImage: "plus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private func commitNewProfile() {
+        let name = newProfileName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        store.add(CustomProfile.capture(name: name, displays: service.displays))
+        isNamingNewProfile = false
+        newProfileName = ""
+        showToast("Saved “\(name)”")
+    }
+
+    private func commitRename(_ profile: CustomProfile) {
+        let name = renameText.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        store.rename(id: profile.id, to: name)
+        renameTargetID = nil
+    }
+
+    // MARK: - Toast & errors
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let toastMessage {
+            Text(toastMessage)
+                .font(.callout)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(radius: 3)
+                .padding(.bottom, 44)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastDismissTask?.cancel()
+        withAnimation { toastMessage = message }
+        toastDismissTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            withAnimation { toastMessage = nil }
+        }
     }
 
     private func attempt(_ action: () throws -> Void) {
