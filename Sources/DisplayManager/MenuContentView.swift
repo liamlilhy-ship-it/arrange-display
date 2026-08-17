@@ -28,12 +28,6 @@ struct MenuContentView: View {
                 presetRow(preset)
             }
 
-            Divider().padding(.horizontal, 12)
-
-            Text("My Profiles")
-                .font(.headline)
-                .padding(.horizontal, 12)
-
             ForEach(store.profiles) { profile in
                 customProfileRow(profile)
             }
@@ -78,7 +72,7 @@ struct MenuContentView: View {
 
         profileButton(
             title: preset.title,
-            subtitle: "Needs \(preset.requiredExternalCount) external\(preset.requiredExternalCount == 1 ? "" : "s")",
+            subtitle: "\(preset.requiredExternalCount + 1) screens",
             enabled: placements != nil,
             thumb: ArrangementThumbView(placements: placements ?? PresetLayouts.genericPlacements(for: preset))
         ) {
@@ -107,7 +101,7 @@ struct MenuContentView: View {
             let applicable = profile.placements(matching: service.displays) != nil
             profileButton(
                 title: profile.name,
-                subtitle: profile.hasMirroring ? "Mirrored" : nil,
+                subtitle: "\(profile.displays.count) screen\(profile.displays.count == 1 ? "" : "s")",
                 enabled: applicable,
                 thumb: ArrangementThumbView(profile: profile)
             ) {

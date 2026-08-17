@@ -13,7 +13,9 @@ Look for the two-displays icon in the menu bar. Click a profile to apply it — 
 
 ## Custom profiles
 
-"Save Current as Profile…" snapshots the current arrangement — positions, main display, and mirroring state — pinned to each physical display's hardware UUID. Right-click a saved profile to rename or delete it. A profile is grayed out unless exactly its saved displays are connected; profiles containing mirrored displays show a mirror badge.
+"Save Current as Profile…" snapshots the current arrangement — positions, main display, and mirroring state — pinned to each physical display's hardware UUID. Right-click a saved profile to rename or delete it. A profile is grayed out unless exactly its saved displays are connected.
+
+In thumbnails, blue marks the main screen, the built-in display is drawn as a laptop (screen with base bar), and screens are numbered — mirrored displays draw as stacked cards sharing one number.
 
 ## Presets
 

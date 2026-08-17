@@ -63,8 +63,6 @@ struct CustomProfile: Codable, Identifiable {
         })
     }
 
-    var hasMirroring: Bool { displays.contains { $0.mirrorSourceUUID != nil } }
-
     /// Maps saved displays to the connected ones by hardware UUID.
     /// Returns nil unless the connected display set exactly matches the saved set.
     func placements(matching connected: [DisplayInfo]) -> [Placement]? {

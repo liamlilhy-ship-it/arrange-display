@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 
 // CLI mode for headless testing and scripting:
 //   DisplayManager list                print connected displays
@@ -71,7 +73,7 @@ func runCLI(_ args: [String]) -> Int32 {
         }
     case "profiles":
         for p in ProfileStore().profiles {
-            let extras = [p.hasMirroring ? "mirrored" : nil,
+            let extras = [p.displays.contains { $0.mirrorSourceUUID != nil } ? "mirrored" : nil,
                           p.placements(matching: displays) == nil ? "not applicable now" : nil]
                 .compactMap { $0 }.joined(separator: ", ")
             print("\(p.name)\t\(p.displays.count) displays\(extras.isEmpty ? "" : "\t(\(extras))")")
@@ -92,8 +94,36 @@ func runCLI(_ args: [String]) -> Int32 {
         } catch {
             return fail(error.localizedDescription)
         }
+    case "thumb":
+        // Debug: render every arrangement thumbnail to PNG for visual inspection.
+        guard args.count == 2 else { return fail("usage: DisplayManager thumb <dir>") }
+        let dir = URL(fileURLWithPath: args[1])
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var views: [(String, ArrangementThumbView)] = Preset.allCases.map { preset in
+            ("preset-\(preset.rawValue)",
+             ArrangementThumbView(placements: PresetLayouts.placements(for: preset, displays: displays)
+                ?? PresetLayouts.genericPlacements(for: preset)))
+        }
+        views += ProfileStore().profiles.map { ("profile-\($0.name)", ArrangementThumbView(profile: $0)) }
+        return MainActor.assumeIsolated {
+            for (name, view) in views {
+                let renderer = ImageRenderer(content: view.frame(width: 72, height: 46)
+                    .background(Color(white: 0.95)))
+                renderer.scale = 4
+                guard let cg = renderer.cgImage,
+                      let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
+                else { return fail("failed to render \(name)") }
+                do {
+                    try png.write(to: dir.appendingPathComponent("\(name).png"))
+                } catch {
+                    return fail(error.localizedDescription)
+                }
+            }
+            print("rendered \(views.count) thumbnails to \(dir.path)")
+            return 0
+        }
     default:
-        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name>]")
+        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name> | thumb <dir>]")
     }
 }
 
