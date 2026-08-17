@@ -2,7 +2,11 @@ import SwiftUI
 
 struct DisplayManagerApp: App {
     @StateObject private var service = DisplayService()
-    @StateObject private var store = ProfileStore()
+    @StateObject private var store = {
+        let store = ProfileStore()
+        store.seedPresets(from: DisplayService.currentDisplays())
+        return store
+    }()
 
     var body: some Scene {
         MenuBarExtra("Display Manager", systemImage: "display.2") {

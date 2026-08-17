@@ -25,12 +25,8 @@ struct MenuContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            ForEach(Preset.allCases) { preset in
-                presetRow(preset)
-            }
-
             ForEach(store.profiles) { profile in
-                customProfileRow(profile)
+                profileRow(profile)
             }
 
             saveCurrentSection
@@ -63,29 +59,14 @@ struct MenuContentView: View {
         }
         .frame(width: 300)
         .overlay(alignment: .bottom) { toastOverlay }
+        .onAppear { store.seedPresets(from: service.displays) }
+        .onChange(of: service.displays) { store.seedPresets(from: service.displays) }
     }
 
     // MARK: - Rows
 
     @ViewBuilder
-    private func presetRow(_ preset: Preset) -> some View {
-        let placements = PresetLayouts.placements(for: preset, displays: service.displays)
-
-        profileButton(
-            title: preset.title,
-            subtitle: "\(preset.requiredExternalCount + 1) screens",
-            enabled: placements != nil,
-            thumb: ArrangementThumbView(placements: placements ?? PresetLayouts.genericPlacements(for: preset))
-        ) {
-            attempt {
-                try service.apply(preset: preset)
-                showToast("Applied “\(preset.title)”")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func customProfileRow(_ profile: CustomProfile) -> some View {
+    private func profileRow(_ profile: CustomProfile) -> some View {
         if renameTargetID == profile.id {
             HStack(spacing: 10) {
                 ArrangementThumbView(profile: profile)
