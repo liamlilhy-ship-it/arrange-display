@@ -1,5 +1,44 @@
 import SwiftUI
 
+/// Makes the MenuBarExtra panel window transparent so the desktop shows
+/// through the content's own glass sheet — the Control Center look. The
+/// system panel draws its background with an effect view in the window
+/// frame; hide it (but never the content's own ancestors).
+struct TransparentPanel: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { Self.clearBackground(around: view) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { Self.clearBackground(around: view) }
+    }
+
+    private static func clearBackground(around view: NSView) {
+        guard let window = view.window, let content = window.contentView else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        var ancestors = Set<ObjectIdentifier>()
+        var cursor: NSView? = content
+        while let v = cursor {
+            ancestors.insert(ObjectIdentifier(v))
+            cursor = v.superview
+        }
+        func walk(_ v: NSView) {
+            let isBackdrop = v is NSVisualEffectView
+                || String(describing: type(of: v)).contains("GlassEffectView")
+            if isBackdrop, !ancestors.contains(ObjectIdentifier(v)) {
+                v.isHidden = true
+            }
+            guard v !== content else { return }
+            v.subviews.forEach(walk)
+        }
+        if let frame = content.superview { walk(frame) }
+        window.invalidateShadow()
+    }
+}
+
 /// A bordered, wrapping text field that grows in height with its content.
 /// AppKit-backed: SwiftUI's TextField/TextEditor won't reliably auto-grow
 /// inside the MenuBarExtra panel, so the height is measured from the cell.
@@ -209,6 +248,10 @@ struct MenuContentView: View {
             .padding(.bottom, 10)
         }
         .frame(width: 300)
+        // The whole panel is one glass sheet over a transparent window,
+        // so the desktop shows through — Control Center style.
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .background(TransparentPanel())
         .overlay(alignment: .bottom) { toastOverlay }
     }
 
@@ -284,7 +327,7 @@ struct MenuContentView: View {
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
         return reorderRowVisual(profile)
-            .glassEffect(.clear, in: .rect(cornerRadius: 12))
+            .glassEffect(.regular, in: .rect(cornerRadius: 12))
             .opacity(isDragged ? 0.25
                      : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
             .padding(.horizontal, 10)
@@ -336,7 +379,7 @@ struct MenuContentView: View {
         if let dragState,
            let profile = store.profiles.first(where: { $0.id == dragState.id }) {
             reorderRowVisual(profile)
-                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
                 .shadow(radius: 3, y: 1)
                 .padding(.horizontal, 10)
                 .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
@@ -403,7 +446,7 @@ struct MenuContentView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.primary.opacity(hovered ? 0.08 : 0)))
         .animation(.easeInOut(duration: 0.12), value: hovered)
-        .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 12))
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
         .opacity(enabled ? 1 : 0.4)
         .padding(.horizontal, 10)
     }
@@ -523,7 +566,7 @@ struct MenuContentView: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .glassEffect(.clear, in: .capsule)
+                .glassEffect(.regular, in: .capsule)
                 .shadow(radius: 3)
                 .padding(.bottom, 44)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
