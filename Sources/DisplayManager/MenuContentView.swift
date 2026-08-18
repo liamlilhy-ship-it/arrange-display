@@ -50,12 +50,15 @@ private struct Bubble: ViewModifier {
     private let fill = 0.06
     private let rim = 0.65
     private let hover = 0.30
+    // Every bubble brightens under the pointer on its own.
+    @State private var isHovering = false
 
     func body(content: Content) -> some View {
-        content
+        let active = highlight || isHovering
+        return content
             .background(
                 RoundedRectangle(cornerRadius: radius)
-                    .fill(Color.white.opacity(highlight ? hover : fill)))
+                    .fill(Color.white.opacity(active ? hover : fill)))
             .overlay(
                 RoundedRectangle(cornerRadius: radius)
                     .strokeBorder(
@@ -63,6 +66,8 @@ private struct Bubble: ViewModifier {
                                        startPoint: .top, endPoint: .bottom),
                         lineWidth: 1)
                     .allowsHitTesting(false))
+            .onHover { isHovering = $0 }
+            .animation(.easeInOut(duration: 0.12), value: active)
     }
 }
 
@@ -208,6 +213,8 @@ struct MenuContentView: View {
 
     // Row under the pointer, for the menu-style hover highlight.
     @State private var hoveredID: UUID?
+    // Row whose … icon is under the pointer, for its own circle highlight.
+    @State private var hoveredMenuID: UUID?
 
     // Settings: frost wash over the sheet (default = Liam's tuned value)
     // and UI language.
@@ -318,10 +325,16 @@ struct MenuContentView: View {
 
                 Spacer()
 
-                Text(language == "zh" ? "\(externalCount) 个外接屏"
-                                      : "\(externalCount) external\(externalCount == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Connection status: green when externals are detected.
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
+                        .frame(width: 7, height: 7)
+                    Text(language == "zh" ? "\(externalCount) 个外接屏"
+                                          : "\(externalCount) external\(externalCount == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(externalCount > 0 ? .green : .secondary)
+                }
 
                 Button {
                     NSApp.terminate(nil)
@@ -440,7 +453,6 @@ struct MenuContentView: View {
                     showToast(L("Applied “\(profile.name)”", "已应用“\(profile.name)”"))
                 }
             }
-            .onHover { hoveredID = $0 ? profile.id : nil }
             .overlay(alignment: .trailing) {
                 Menu {
                     profileActions(profile)
@@ -451,8 +463,16 @@ struct MenuContentView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .padding(.trailing, 18)
+                .padding(3)
+                .background(
+                    Circle().fill(Color.white.opacity(hoveredMenuID == profile.id ? 0.35 : 0)))
+                .animation(.easeInOut(duration: 0.12), value: hoveredMenuID)
+                .onHover { hoveredMenuID = $0 ? profile.id : nil }
+                .padding(.trailing, 15)
             }
+            // After the overlay, so the row highlight holds while the
+            // pointer is on the … icon.
+            .onHover { hoveredID = $0 ? profile.id : nil }
             .contextMenu { profileActions(profile) }
         }
     }
