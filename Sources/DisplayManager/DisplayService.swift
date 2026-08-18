@@ -39,7 +39,8 @@ final class DisplayService: ObservableObject {
                 bounds: CGDisplayBounds(id),
                 isBuiltin: CGDisplayIsBuiltin(id) != 0,
                 isMain: CGDisplayIsMain(id) != 0,
-                mirrorSourceID: mirrorSource == kCGNullDirectDisplay ? nil : mirrorSource
+                mirrorSourceID: mirrorSource == kCGNullDirectDisplay ? nil : mirrorSource,
+                mode: CGDisplayCopyDisplayMode(id).map(spec)
             )
         }
     }
@@ -79,7 +80,22 @@ final class DisplayService: ObservableObject {
                 throw ApplyError.configurationFailed(err)
             }
         }
-        // Set mirror state for every display first (kCGNullDirectDisplay = extended),
+        // Restore display modes first: the saved origins were captured under
+        // these modes, and a mode change alters the display's point size.
+        // A mode that's no longer offered is skipped — the arrangement is
+        // never held hostage by the mode.
+        for p in placements {
+            guard let spec = p.mode else { continue }
+            if let current = CGDisplayCopyDisplayMode(p.displayID), Self.spec(current).matches(spec) {
+                continue
+            }
+            let options = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
+            guard let all = CGDisplayCopyAllDisplayModes(p.displayID, options) as? [CGDisplayMode],
+                  let target = all.first(where: { Self.spec($0).matches(spec) })
+            else { continue }
+            _ = CGConfigureDisplayWithDisplayMode(config, p.displayID, target, nil)
+        }
+        // Then mirror state for every display (kCGNullDirectDisplay = extended),
         // then origins for the extended ones.
         for p in placements {
             try check(CGConfigureDisplayMirrorOfDisplay(config, p.displayID, p.mirrorOf ?? kCGNullDirectDisplay))
@@ -88,5 +104,11 @@ final class DisplayService: ObservableObject {
             try check(CGConfigureDisplayOrigin(config, p.displayID, p.x, p.y))
         }
         try check(CGCompleteDisplayConfiguration(config, .permanently))
+    }
+
+    static func spec(_ mode: CGDisplayMode) -> ModeSpec {
+        ModeSpec(pixelWidth: Int32(mode.pixelWidth), pixelHeight: Int32(mode.pixelHeight),
+                 pointWidth: Int32(mode.width), pointHeight: Int32(mode.height),
+                 refreshRate: mode.refreshRate)
     }
 }

@@ -49,7 +49,7 @@ enum PresetLayouts {
     static func genericPlacements(for preset: Preset) -> [PresetPlacement] {
         func fake(_ id: CGDirectDisplayID, w: CGFloat, h: CGFloat, builtin: Bool) -> DisplayInfo {
             DisplayInfo(id: id, uuid: "", name: "", bounds: CGRect(x: 0, y: 0, width: w, height: h),
-                        isBuiltin: builtin, isMain: false, mirrorSourceID: nil)
+                        isBuiltin: builtin, isMain: false, mirrorSourceID: nil, mode: nil)
         }
         let displays = [fake(1, w: 1920, h: 1080, builtin: false),
                         fake(2, w: 1920, h: 1080, builtin: false),

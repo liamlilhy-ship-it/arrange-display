@@ -13,7 +13,7 @@ Look for the two-displays icon in the menu bar. Click a profile to apply it — 
 
 ## Profiles
 
-A profile is a saved screen arrangement — positions, main display, and mirroring. It fits whenever the connected screen counts match (laptop + N externals): externals are assigned left-to-right and positions scale to the real monitor sizes. When the exact monitors it was saved with are connected, each physical monitor silently gets its remembered position instead.
+A profile is a saved screen arrangement — positions, main display, mirroring, and each monitor's display mode (resolution, scaling, refresh rate). It fits whenever the connected screen counts match (laptop + N externals): externals are assigned left-to-right and positions scale to the real monitor sizes. When the exact monitors it was saved with are connected, each physical monitor silently gets its remembered position and display mode instead; a mode that's no longer offered is skipped without blocking the arrangement.
 
 Click a row to apply (a toast confirms); ⋯ or right-click for Rename / Delete. "Edit Profiles…" opens the manager window: pick a profile in the sidebar and edit it — drag with magnetic snapping, Set as Main, Mirror menu, Add/Remove screens, Apply Now to preview, Reset, arrow-key nudging.
 

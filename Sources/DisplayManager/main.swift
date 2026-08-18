@@ -26,7 +26,24 @@ func runCLI(_ args: [String]) -> Int32 {
                          d.isMain ? "main" : nil,
                          d.mirrorSourceID.map { "mirrors=\($0)" }]
                 .compactMap { $0 }.joined(separator: ",")
-            print("\(d.id)\t\(d.name)\t(\(Int(d.bounds.minX)),\(Int(d.bounds.minY))) \(Int(d.bounds.width))x\(Int(d.bounds.height))\t[\(flags)]\t\(d.uuid)")
+            let mode = d.mode.map {
+                "\($0.pixelWidth)x\($0.pixelHeight)@\(String(format: "%.0f", $0.refreshRate))Hz"
+            } ?? "?"
+            print("\(d.id)\t\(d.name)\t(\(Int(d.bounds.minX)),\(Int(d.bounds.minY))) \(Int(d.bounds.width))x\(Int(d.bounds.height))\t\(mode)\t[\(flags)]\t\(d.uuid)")
+        }
+        return 0
+    case "modes":
+        // Debug: list every mode a display offers.
+        guard args.count == 2, let id = UInt32(args[1]) else {
+            return fail("usage: DisplayManager modes <displayID>")
+        }
+        let options = [kCGDisplayShowDuplicateLowResolutionModes as String: true] as CFDictionary
+        guard let all = CGDisplayCopyAllDisplayModes(id, options) as? [CGDisplayMode] else {
+            return fail("no modes for display \(args[1])")
+        }
+        for m in all {
+            let s = DisplayService.spec(m)
+            print("\(s.pixelWidth)x\(s.pixelHeight)\tlooks-like \(s.pointWidth)x\(s.pointHeight)\t@\(String(format: "%.2f", s.refreshRate))Hz")
         }
         return 0
     case "apply":
@@ -51,7 +68,8 @@ func runCLI(_ args: [String]) -> Int32 {
         let placements = displays.map { d in
             Placement(displayID: d.id,
                       x: Int32(d.bounds.origin.x), y: Int32(d.bounds.origin.y),
-                      mirrorOf: d.mirrorSourceID)
+                      mirrorOf: d.mirrorSourceID,
+                      mode: d.mode)
         }
         do {
             try JSONEncoder().encode(placements).write(to: URL(fileURLWithPath: args[1]))
@@ -147,7 +165,7 @@ func runCLI(_ args: [String]) -> Int32 {
             }
         }
     default:
-        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name> | thumb <dir> | editor-shot <profile> <path>]")
+        return fail("usage: DisplayManager [list | apply <a|b|c> | capture <path> | restore <path> | profiles | profile <name> | modes <displayID> | thumb <dir> | editor-shot <profile> <path>]")
     }
 }
 

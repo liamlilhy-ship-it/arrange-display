@@ -20,6 +20,10 @@ struct ProfileEditorView: View {
         let isBuiltin: Bool
         var origin: CGPoint
         var mirrorOfID: UUID? // nil = extended screen with a real position
+        // Mode memory, passed through untouched by the editor.
+        var pixelWidth: Int32? = nil
+        var pixelHeight: Int32? = nil
+        var refreshRate: Double? = nil
     }
 
     @State private var displays: [EditableDisplay]
@@ -55,7 +59,10 @@ struct ProfileEditorView: View {
                             size: CGSize(width: CGFloat($0.width), height: CGFloat($0.height)),
                             isBuiltin: $0.isBuiltin,
                             origin: CGPoint(x: CGFloat($0.x), y: CGFloat($0.y)),
-                            mirrorOfID: nil)
+                            mirrorOfID: nil,
+                            pixelWidth: $0.pixelWidth,
+                            pixelHeight: $0.pixelHeight,
+                            refreshRate: $0.refreshRate)
         }
         for i in profile.displays.indices {
             if let source = profile.displays[i].mirrorSourceIndex, result.indices.contains(source) {
@@ -347,7 +354,9 @@ struct ProfileEditorView: View {
                          y: Int32((d.origin.y - shift.y).rounded()),
                          width: Int32(d.size.width), height: Int32(d.size.height),
                          isBuiltin: d.isBuiltin,
-                         name: d.name)
+                         name: d.name,
+                         pixelWidth: d.pixelWidth, pixelHeight: d.pixelHeight,
+                         refreshRate: d.refreshRate)
         }
         for d in displays where d.mirrorOfID != nil {
             guard let sourceIndex = extended.firstIndex(where: { $0.id == d.mirrorOfID })
@@ -357,7 +366,9 @@ struct ProfileEditorView: View {
                                       width: Int32(d.size.width), height: Int32(d.size.height),
                                       isBuiltin: d.isBuiltin,
                                       mirrorSourceIndex: sourceIndex,
-                                      name: d.name))
+                                      name: d.name,
+                                      pixelWidth: d.pixelWidth, pixelHeight: d.pixelHeight,
+                                      refreshRate: d.refreshRate))
         }
         return CustomProfile(id: profileID ?? UUID(), name: profileName, displays: saved)
     }

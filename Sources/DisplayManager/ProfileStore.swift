@@ -11,6 +11,7 @@ final class ProfileStore: ObservableObject {
     ) {
         self.url = url
         load()
+        backfillModes()
     }
 
     func load() {
@@ -74,6 +75,30 @@ final class ProfileStore: ObservableObject {
         profiles.insert(contentsOf: layouts, at: 0)
         defaults.set(true, forKey: "seededLayouts")
         persist()
+    }
+
+    /// Older profiles predate mode memory. When one of their monitors is
+    /// connected right now and its current mode has the same point size the
+    /// profile already stores, adopt that mode as the remembered one.
+    /// Fills only missing fields; never overwrites.
+    private func backfillModes() {
+        let byUUID = Dictionary(uniqueKeysWithValues:
+            DisplayService.currentDisplays().map { ($0.uuid, $0) })
+        var changed = false
+        for p in profiles.indices {
+            for d in profiles[p].displays.indices {
+                let saved = profiles[p].displays[d]
+                guard saved.pixelWidth == nil, let uuid = saved.uuid,
+                      let mode = byUUID[uuid]?.mode,
+                      mode.pointWidth == saved.width, mode.pointHeight == saved.height
+                else { continue }
+                profiles[p].displays[d].pixelWidth = mode.pixelWidth
+                profiles[p].displays[d].pixelHeight = mode.pixelHeight
+                profiles[p].displays[d].refreshRate = mode.refreshRate
+                changed = true
+            }
+        }
+        if changed { persist() }
     }
 
     func add(_ profile: CustomProfile) {

@@ -10,6 +10,23 @@ struct DisplayInfo: Identifiable, Hashable {
     let isMain: Bool
     /// Non-nil when this display mirrors another; the value is the mirrored (source) display.
     let mirrorSourceID: CGDirectDisplayID?
+    let mode: ModeSpec?
+}
+
+/// A display mode described semantically (not by macOS's internal mode id,
+/// which can shift across OS updates): pixel resolution, point size
+/// (scaling), and refresh rate.
+struct ModeSpec: Codable, Hashable {
+    let pixelWidth: Int32, pixelHeight: Int32
+    let pointWidth: Int32, pointHeight: Int32
+    let refreshRate: Double
+
+    /// Refresh matches with tolerance (59.94 vs 60); 0 acts as a wildcard.
+    func matches(_ other: ModeSpec) -> Bool {
+        pixelWidth == other.pixelWidth && pixelHeight == other.pixelHeight &&
+        pointWidth == other.pointWidth && pointHeight == other.pointHeight &&
+        (refreshRate == 0 || other.refreshRate == 0 || abs(refreshRate - other.refreshRate) < 0.5)
+    }
 }
 
 struct Placement: Codable {
@@ -19,6 +36,8 @@ struct Placement: Codable {
     /// Non-nil: configure this display to mirror the given display (origin ignored).
     /// Nil: extended display at (x, y).
     var mirrorOf: CGDirectDisplayID? = nil
+    /// Non-nil: also restore this display mode (resolution/scaling/refresh).
+    var mode: ModeSpec? = nil
 }
 
 enum Preset: String, CaseIterable, Identifiable {
@@ -65,7 +84,10 @@ struct CustomProfile: Codable, Identifiable {
                          width: Int32(d.bounds.width), height: Int32(d.bounds.height),
                          isBuiltin: d.isBuiltin,
                          mirrorSourceIndex: mirrorIndex,
-                         name: d.name)
+                         name: d.name,
+                         pixelWidth: d.mode?.pixelWidth,
+                         pixelHeight: d.mode?.pixelHeight,
+                         refreshRate: d.mode?.refreshRate)
         }
         var result = extended.map { saved($0, mirrorIndex: nil) }
         for d in mirrors {
@@ -94,7 +116,8 @@ struct CustomProfile: Codable, Identifiable {
             let mirrorOf = saved.mirrorSourceIndex.flatMap { i -> CGDirectDisplayID? in
                 displays.indices.contains(i) ? displays[i].uuid.flatMap { byUUID[$0]?.id } : nil
             }
-            return Placement(displayID: real.id, x: saved.x, y: saved.y, mirrorOf: mirrorOf)
+            return Placement(displayID: real.id, x: saved.x, y: saved.y,
+                             mirrorOf: mirrorOf, mode: saved.modeSpec)
         }
     }
 
@@ -173,4 +196,16 @@ struct SavedDisplay: Codable {
     /// mirrorSourceIndex when the store loads.
     var mirrorSourceUUID: String? = nil
     var name: String? = nil // monitor name at capture time
+    /// Display mode at capture time; restored only on the exact monitor.
+    /// Nil (e.g. in older profiles) = leave the mode alone.
+    var pixelWidth: Int32? = nil
+    var pixelHeight: Int32? = nil
+    var refreshRate: Double? = nil
+
+    var modeSpec: ModeSpec? {
+        guard let pixelWidth, let pixelHeight else { return nil }
+        return ModeSpec(pixelWidth: pixelWidth, pixelHeight: pixelHeight,
+                        pointWidth: width, pointHeight: height,
+                        refreshRate: refreshRate ?? 0)
+    }
 }
