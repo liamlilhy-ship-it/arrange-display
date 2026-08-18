@@ -122,4 +122,14 @@ final class ProfileStore: ObservableObject {
         profiles.removeAll { $0.id == id }
         persist()
     }
+
+    /// Moves the dragged profile to the position of the one it hovers over.
+    func reorder(draggingID: UUID, over targetID: UUID) {
+        guard draggingID != targetID,
+              let from = profiles.firstIndex(where: { $0.id == draggingID }),
+              let to = profiles.firstIndex(where: { $0.id == targetID })
+        else { return }
+        profiles.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        persist()
+    }
 }

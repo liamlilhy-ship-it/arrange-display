@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MenuContentView: View {
     @ObservedObject var service: DisplayService
@@ -15,6 +16,9 @@ struct MenuContentView: View {
     // Inline rename state for custom profiles.
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
+
+    // Row being dragged to reorder the menu.
+    @State private var draggingID: UUID?
 
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
@@ -103,6 +107,33 @@ struct MenuContentView: View {
                 .padding(.trailing, 12)
             }
             .contextMenu { profileActions(profile) }
+            .onDrag {
+                draggingID = profile.id
+                return NSItemProvider(object: profile.id.uuidString as NSString)
+            }
+            .onDrop(of: [.text], delegate: RowReorderDelegate(
+                targetID: profile.id, draggingID: $draggingID, store: store))
+        }
+    }
+
+    /// Reorders live while the dragged row hovers over others.
+    private struct RowReorderDelegate: DropDelegate {
+        let targetID: UUID
+        @Binding var draggingID: UUID?
+        let store: ProfileStore
+
+        func dropEntered(info: DropInfo) {
+            guard let draggingID else { return }
+            store.reorder(draggingID: draggingID, over: targetID)
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            draggingID = nil
+            return true
         }
     }
 
@@ -129,7 +160,9 @@ struct MenuContentView: View {
         title: String, subtitle: String?, enabled: Bool,
         thumb: ArrangementThumbView, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        // Not .disabled: grayed rows must stay draggable for reordering,
+        // so the click is guarded instead.
+        Button(action: { if enabled { action() } }) {
             HStack(spacing: 10) {
                 thumb.frame(width: 72, height: 46)
 
@@ -153,7 +186,6 @@ struct MenuContentView: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-        .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
     }
 
@@ -162,7 +194,10 @@ struct MenuContentView: View {
     @ViewBuilder
     private var saveCurrentSection: some View {
         if isNamingNewProfile {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
+                // Live preview of what will be saved: the current arrangement.
+                ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
+                    .frame(width: 72, height: 46)
                 TextField("Profile name", text: $newProfileName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(commitNewProfile)
@@ -176,6 +211,7 @@ struct MenuContentView: View {
             .padding(.horizontal, 12)
         } else {
             Button {
+                newProfileName = suggestedProfileName()
                 isNamingNewProfile = true
             } label: {
                 Label("Save Current as Profile…", systemImage: "plus.circle")
@@ -184,6 +220,16 @@ struct MenuContentView: View {
             .foregroundStyle(.tint)
             .padding(.horizontal, 12)
         }
+    }
+
+    /// "New Profile", or "New Profile (1)", (2)… when taken.
+    private func suggestedProfileName() -> String {
+        let names = Set(store.profiles.map(\.name))
+        let base = "New Profile"
+        guard names.contains(base) else { return base }
+        var i = 1
+        while names.contains("\(base) (\(i))") { i += 1 }
+        return "\(base) (\(i))"
     }
 
     private func commitNewProfile() {
