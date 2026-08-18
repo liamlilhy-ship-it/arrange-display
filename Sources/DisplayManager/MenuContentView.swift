@@ -17,8 +17,12 @@ struct MenuContentView: View {
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
 
-    // Row being dragged to reorder the menu.
+    // Reorder mode: entered from a row's ... menu; rows show drag handles.
+    @State private var isReordering = false
     @State private var draggingID: UUID?
+
+    /// Saved names must fit two lines in the 300pt menu row.
+    private static let nameLimit = 48
 
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
@@ -33,7 +37,18 @@ struct MenuContentView: View {
                 profileRow(profile)
             }
 
-            saveCurrentSection
+            if isReordering {
+                HStack {
+                    Text("Drag the handles to reorder")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Done") { isReordering = false }
+                }
+                .padding(.horizontal, 12)
+            } else {
+                saveCurrentSection
+            }
 
             if let errorMessage {
                 Text(errorMessage)
@@ -75,6 +90,11 @@ struct MenuContentView: View {
                     .frame(width: 72, height: 46)
                 TextField("Profile name", text: $renameText)
                     .textFieldStyle(.roundedBorder)
+                    .onChange(of: renameText) { _, new in
+                        if new.count > Self.nameLimit {
+                            renameText = String(new.prefix(Self.nameLimit))
+                        }
+                    }
                     .onSubmit { commitRename(profile) }
                 Button("Save") { commitRename(profile) }
                     .disabled(renameText.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -89,28 +109,35 @@ struct MenuContentView: View {
                 enabled: applicable,
                 thumb: ArrangementThumbView(profile: profile)
             ) {
+                guard !isReordering else { return }
                 attempt {
                     try service.apply(profile: profile)
                     showToast("Applied “\(profile.name)”")
                 }
             }
             .overlay(alignment: .trailing) {
-                Menu {
-                    profileActions(profile)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                if isReordering {
+                    Image(systemName: "line.3.horizontal")
                         .foregroundStyle(.secondary)
+                        .padding(.trailing, 12)
+                        .onDrag {
+                            draggingID = profile.id
+                            return NSItemProvider(object: profile.id.uuidString as NSString)
+                        }
+                } else {
+                    Menu {
+                        profileActions(profile)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .padding(.trailing, 12)
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .padding(.trailing, 12)
             }
             .contextMenu { profileActions(profile) }
-            .onDrag {
-                draggingID = profile.id
-                return NSItemProvider(object: profile.id.uuidString as NSString)
-            }
             .onDrop(of: [.text], delegate: RowReorderDelegate(
                 targetID: profile.id, draggingID: $draggingID, store: store))
         }
@@ -147,6 +174,7 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func profileActions(_ profile: CustomProfile) -> some View {
+        Button("Reorder Profiles…") { isReordering = true }
         Button("Rename…") {
             renameText = profile.name
             renameTargetID = profile.id
@@ -197,10 +225,16 @@ struct MenuContentView: View {
             HStack(spacing: 8) {
                 // Live preview of what will be saved: the current arrangement.
                 ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
-                    .frame(width: 56, height: 36)
-                TextField("Profile name", text: $newProfileName)
+                    .frame(width: 72, height: 46)
+                TextField("Profile name", text: $newProfileName, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...2)
                     .frame(maxWidth: .infinity)
+                    .onChange(of: newProfileName) { _, new in
+                        if new.count > Self.nameLimit {
+                            newProfileName = String(new.prefix(Self.nameLimit))
+                        }
+                    }
                     .onSubmit(commitNewProfile)
                 Button(action: commitNewProfile) {
                     Image(systemName: "checkmark.circle.fill")
