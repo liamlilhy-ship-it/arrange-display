@@ -60,6 +60,7 @@ struct GrowingTextField: NSViewRepresentable {
 struct ProfileNameEditor: View {
     let thumb: ArrangementThumbView
     @Binding var text: String
+    @Binding var warning: String?
     let limit: Int
     let onCommit: () -> Void
     let onCancel: () -> Void
@@ -80,8 +81,15 @@ struct ProfileNameEditor: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
                     .onChange(of: text) { _, new in
+                        warning = nil
                         if new.count > limit { text = String(new.prefix(limit)) }
                     }
+
+                if let warning {
+                    Text(warning)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
 
                 HStack(spacing: 10) {
                     Text("\(text.count)/\(limit)")
@@ -123,6 +131,9 @@ struct MenuContentView: View {
     // Inline rename state for custom profiles.
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
+
+    // Duplicate-name warning shown in whichever name editor is open.
+    @State private var nameWarning: String?
 
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
     // The dragged row floats with the finger; neighbors shift; the array
@@ -205,9 +216,13 @@ struct MenuContentView: View {
             ProfileNameEditor(
                 thumb: ArrangementThumbView(profile: profile),
                 text: $renameText,
+                warning: $nameWarning,
                 limit: Self.nameLimit,
                 onCommit: { commitRename(profile) },
-                onCancel: { renameTargetID = nil }
+                onCancel: {
+                    renameTargetID = nil
+                    nameWarning = nil
+                }
             )
             .padding(.vertical, 4)
         } else {
@@ -328,11 +343,11 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func profileActions(_ profile: CustomProfile) -> some View {
-        Button("Reorder Profiles…") {
+        Button("Reorder") {
             orderBackup = store.profiles.map(\.id)
             isReordering = true
         }
-        Button("Rename…") {
+        Button("Rename") {
             renameText = profile.name
             renameTargetID = profile.id
         }
@@ -384,11 +399,13 @@ struct MenuContentView: View {
             ProfileNameEditor(
                 thumb: ArrangementThumbView(profile: .capture(name: "", displays: service.displays)),
                 text: $newProfileName,
+                warning: $nameWarning,
                 limit: Self.nameLimit,
                 onCommit: commitNewProfile,
                 onCancel: {
                     isNamingNewProfile = false
                     newProfileName = ""
+                    nameWarning = nil
                 }
             )
         } else {
@@ -447,6 +464,10 @@ struct MenuContentView: View {
     private func commitNewProfile() {
         let name = newProfileName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
+        guard isNameFree(name) else {
+            nameWarning = "A profile with this name already exists"
+            return
+        }
         store.add(CustomProfile.capture(name: name, displays: service.displays))
         isNamingNewProfile = false
         newProfileName = ""
@@ -456,8 +477,16 @@ struct MenuContentView: View {
     private func commitRename(_ profile: CustomProfile) {
         let name = renameText.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
+        guard isNameFree(name, excluding: profile.id) else {
+            nameWarning = "A profile with this name already exists"
+            return
+        }
         store.rename(id: profile.id, to: name)
         renameTargetID = nil
+    }
+
+    private func isNameFree(_ name: String, excluding id: UUID? = nil) -> Bool {
+        !store.profiles.contains { $0.id != id && $0.name == name }
     }
 
     // MARK: - Toast & errors
