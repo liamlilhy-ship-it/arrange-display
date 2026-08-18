@@ -11,10 +11,10 @@ One-click macOS display arrangement presets from the menu bar. Save how your mon
 
 ## Download
 
-- **[⬇ Download the latest release](https://github.com/liamlilhy-ship-it/arrange-display/releases/latest/download/ArrangeDisplay.zip)**
-- [All releases](https://github.com/liamlilhy-ship-it/arrange-display/releases)
+- **[⬇ Download ArrangeDisplay.dmg](https://github.com/liamlilhy-ship-it/arrange-display/releases/latest/download/ArrangeDisplay.dmg)** — open it and drag the app into the Applications shortcut
+- [ArrangeDisplay.zip](https://github.com/liamlilhy-ship-it/arrange-display/releases/latest/download/ArrangeDisplay.zip) (plain zip) · [All releases](https://github.com/liamlilhy-ship-it/arrange-display/releases)
 
-Unzip and drag `DisplayManager.app` to Applications (or run it from anywhere). The app is self-signed, so the **first launch** must be: right-click the app → **Open** → **Open**. After that it opens normally.
+The app is self-signed, so the **first launch** must be: right-click the app → **Open** → **Open**. After that it opens normally.
 
 ## User manual
 
