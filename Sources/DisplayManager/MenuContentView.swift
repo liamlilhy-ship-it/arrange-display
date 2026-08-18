@@ -1,5 +1,113 @@
 import SwiftUI
 
+/// A bordered, wrapping text field that grows in height with its content.
+/// AppKit-backed: SwiftUI's TextField/TextEditor won't reliably auto-grow
+/// inside the MenuBarExtra panel, so the height is measured from the cell.
+struct GrowingTextField: NSViewRepresentable {
+    @Binding var text: String
+    var onCommit: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: "")
+        field.isEditable = true
+        field.isSelectable = true
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .preferredFont(forTextStyle: .body)
+        field.lineBreakMode = .byWordWrapping
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
+        field.delegate = context.coordinator
+        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        if field.stringValue != text { field.stringValue = text }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
+        let width = proposal.width ?? 200
+        let bounds = NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)
+        let height = nsView.cell?.cellSize(forBounds: bounds).height ?? 22
+        return CGSize(width: width, height: max(height, 20))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: GrowingTextField
+        init(_ parent: GrowingTextField) { self.parent = parent }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                parent.onCommit()
+                return true
+            }
+            return false
+        }
+    }
+}
+
+/// Shared naming UI for both "Save Current as Profile" and "Rename":
+/// preview thumbnail, growing bordered input, character counter, ✓/✕.
+struct ProfileNameEditor: View {
+    let thumb: ArrangementThumbView
+    @Binding var text: String
+    let limit: Int
+    let onCommit: () -> Void
+    let onCancel: () -> Void
+
+    private var trimmedEmpty: Bool {
+        text.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            thumb.frame(width: 72, height: 46)
+
+            VStack(alignment: .leading, spacing: 6) {
+                GrowingTextField(text: $text, onCommit: { if !trimmedEmpty { onCommit() } })
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
+                    .onChange(of: text) { _, new in
+                        if new.count > limit { text = String(new.prefix(limit)) }
+                    }
+
+                HStack(spacing: 10) {
+                    Text("\(text.count)/\(limit)")
+                        .font(.caption2)
+                        .foregroundStyle(text.count >= limit ? .red : .secondary)
+                    Spacer()
+                    Button(action: onCommit) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.green)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(trimmedEmpty)
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+    }
+}
+
 struct MenuContentView: View {
     @ObservedObject var service: DisplayService
     @ObservedObject var store: ProfileStore
@@ -94,21 +202,13 @@ struct MenuContentView: View {
         if isReordering {
             reorderRow(profile, index: index)
         } else if renameTargetID == profile.id {
-            HStack(spacing: 10) {
-                ArrangementThumbView(profile: profile)
-                    .frame(width: 72, height: 46)
-                TextField("Profile name", text: $renameText)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: renameText) { _, new in
-                        if new.count > Self.nameLimit {
-                            renameText = String(new.prefix(Self.nameLimit))
-                        }
-                    }
-                    .onSubmit { commitRename(profile) }
-                Button("Save") { commitRename(profile) }
-                    .disabled(renameText.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(.horizontal, 12)
+            ProfileNameEditor(
+                thumb: ArrangementThumbView(profile: profile),
+                text: $renameText,
+                limit: Self.nameLimit,
+                onCommit: { commitRename(profile) },
+                onCancel: { renameTargetID = nil }
+            )
             .padding(.vertical, 4)
         } else {
             let applicable = profile.placements(matching: service.displays) != nil
@@ -280,69 +380,17 @@ struct MenuContentView: View {
     @ViewBuilder
     private var saveCurrentSection: some View {
         if isNamingNewProfile {
-            HStack(alignment: .top, spacing: 10) {
-                // Live preview of what will be saved: the current arrangement.
-                ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
-                    .frame(width: 72, height: 46)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    // A TextEditor sized by an invisible text template: the
-                    // template wraps and grows, the editor fills it — so the
-                    // border grows with the content, no inner scrolling.
-                    ZStack(alignment: .topLeading) {
-                        Text(newProfileName.isEmpty ? " " : newProfileName)
-                            .font(.body)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 7)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .opacity(0)
-                        TextEditor(text: $newProfileName)
-                            .font(.body)
-                            .scrollContentBackground(.hidden)
-                            .scrollDisabled(true)
-                            .padding(.vertical, 1)
-                            .padding(.horizontal, 2)
-                    }
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
-                    .onChange(of: newProfileName) { _, new in
-                        // Return commits instead of inserting a newline.
-                        if new.contains("\n") {
-                            newProfileName = new.replacingOccurrences(of: "\n", with: "")
-                            commitNewProfile()
-                            return
-                        }
-                        if new.count > Self.nameLimit {
-                            newProfileName = String(new.prefix(Self.nameLimit))
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        Text("\(newProfileName.count)/\(Self.nameLimit)")
-                            .font(.caption2)
-                            .foregroundStyle(newProfileName.count >= Self.nameLimit ? .red : .secondary)
-                        Spacer()
-                        Button(action: commitNewProfile) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.green)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button {
-                            isNamingNewProfile = false
-                            newProfileName = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
+            // Live preview of what will be saved: the current arrangement.
+            ProfileNameEditor(
+                thumb: ArrangementThumbView(profile: .capture(name: "", displays: service.displays)),
+                text: $newProfileName,
+                limit: Self.nameLimit,
+                onCommit: commitNewProfile,
+                onCancel: {
+                    isNamingNewProfile = false
+                    newProfileName = ""
                 }
-            }
-            .padding(.horizontal, 12)
+            )
         } else {
             Button {
                 newProfileName = suggestedProfileName()
