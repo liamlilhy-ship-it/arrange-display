@@ -154,12 +154,16 @@ struct MenuContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
-                    profileRow(profile, index: index)
+            // Liquid Glass: rows are glass cards; the shared container lets
+            // nearby shapes blend while the drag ghost floats over them.
+            GlassEffectContainer(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
+                        profileRow(profile, index: index)
+                    }
                 }
+                .overlay(alignment: .top) { dragGhost }
             }
-            .overlay(alignment: .top) { dragGhost }
 
             if isReordering {
                 HStack {
@@ -168,7 +172,9 @@ struct MenuContentView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset") { store.setOrder(orderBackup) }
+                        .buttonStyle(.glass)
                     Button("Done") { isReordering = false }
+                        .buttonStyle(.glass)
                 }
                 .padding(.horizontal, 12)
             } else {
@@ -186,6 +192,7 @@ struct MenuContentView: View {
 
             HStack {
                 Button("Display Settings…", action: openDisplaySettings)
+                    .buttonStyle(.glass)
 
                 Spacer()
 
@@ -194,6 +201,7 @@ struct MenuContentView: View {
                     .foregroundStyle(.secondary)
 
                 Button("Quit") { NSApp.terminate(nil) }
+                    .buttonStyle(.glass)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
@@ -245,7 +253,7 @@ struct MenuContentView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .padding(.trailing, 12)
+                .padding(.trailing, 18)
             }
             .contextMenu { profileActions(profile) }
         }
@@ -272,8 +280,10 @@ struct MenuContentView: View {
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
         return reorderRowVisual(profile)
+            .glassEffect(.regular, in: .rect(cornerRadius: 12))
             .opacity(isDragged ? 0.25
                      : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
+            .padding(.horizontal, 10)
             .offset(y: reorderShift(for: index))
             .animation(.easeInOut(duration: 0.15), value: dragTargetIndex)
             .overlay(alignment: .trailing) {
@@ -311,7 +321,7 @@ struct MenuContentView: View {
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .frame(height: 54)
     }
@@ -322,8 +332,9 @@ struct MenuContentView: View {
         if let dragState,
            let profile = store.profiles.first(where: { $0.id == dragState.id }) {
             reorderRowVisual(profile)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
                 .shadow(radius: 3, y: 1)
+                .padding(.horizontal, 10)
                 .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
                 .allowsHitTesting(false)
         }
@@ -379,11 +390,13 @@ struct MenuContentView: View {
                 Spacer()
             }
             .contentShape(Rectangle())
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
         .opacity(enabled ? 1 : 0.4)
+        .padding(.horizontal, 10)
     }
 
     // MARK: - Save current as profile
@@ -411,9 +424,8 @@ struct MenuContentView: View {
             } label: {
                 Label("Save Current as Profile…", systemImage: "plus.circle")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
-            .padding(.horizontal, 12)
+            .buttonStyle(.glass)
+            .padding(.horizontal, 10)
         }
     }
 
@@ -502,7 +514,7 @@ struct MenuContentView: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
+                .glassEffect(.regular, in: .capsule)
                 .shadow(radius: 3)
                 .padding(.bottom, 44)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
