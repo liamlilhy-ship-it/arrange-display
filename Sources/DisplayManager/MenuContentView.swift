@@ -1,42 +1,17 @@
 import SwiftUI
 
-/// Makes the MenuBarExtra panel window transparent so the desktop shows
-/// through the content's own glass sheet — the Control Center look. The
-/// system panel draws its background with an effect view in the window
-/// frame; hide it (but never the content's own ancestors).
-struct TransparentPanel: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { Self.clearBackground(around: view) }
+/// Behind-window blur for the panel sheet — the same mechanism system
+/// panels use. SwiftUI's glassEffect can't sample behind our own window.
+struct BehindWindowBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.material = .popover
+        view.state = .active
         return view
     }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { Self.clearBackground(around: view) }
-    }
-
-    private static func clearBackground(around view: NSView) {
-        guard let window = view.window, let content = window.contentView else { return }
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        var ancestors = Set<ObjectIdentifier>()
-        var cursor: NSView? = content
-        while let v = cursor {
-            ancestors.insert(ObjectIdentifier(v))
-            cursor = v.superview
-        }
-        func walk(_ v: NSView) {
-            let isBackdrop = v is NSVisualEffectView
-                || String(describing: type(of: v)).contains("GlassEffectView")
-            if isBackdrop, !ancestors.contains(ObjectIdentifier(v)) {
-                v.isHidden = true
-            }
-            guard v !== content else { return }
-            v.subviews.forEach(walk)
-        }
-        if let frame = content.superview { walk(frame) }
-        window.invalidateShadow()
-    }
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 /// Control Center-style bubble: a brightened fill plus a light rim.
@@ -251,12 +226,19 @@ struct MenuContentView: View {
         // so the desktop shows through — Control Center style. The frost
         // wash sits between the content and the glass.
         .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(frost * 0.06)))
-        .glassEffect(.clear, in: .rect(cornerRadius: 22))
+        // From level 1 up the sheet blurs what's behind the panel; below 1
+        // is the crisp zone — blur can't fade, only switch off, so the far
+        // left reaches a fully transparent sheet.
+        .background {
+            if frost >= 1 {
+                BehindWindowBlur()
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 22)
                 .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
                 .allowsHitTesting(false))
-        .background(TransparentPanel())
         .overlay(alignment: .bottom) { toastOverlay }
     }
 
