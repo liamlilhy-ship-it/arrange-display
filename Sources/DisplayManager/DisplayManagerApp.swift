@@ -1,22 +1,40 @@
 import SwiftUI
 
-/// The status item and panel are AppKit-managed (StatusPanelController) —
-/// MenuBarExtra's system panel carries a window-server glass backdrop that
-/// can't be made fully transparent.
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var controller: StatusPanelController?
+struct DisplayManagerApp: App {
+    init() {
+        // Debug: DM_OPEN_PANEL=1 auto-opens the menu bar panel after launch
+        // so the design can be screenshotted without a manual click.
+        if ProcessInfo.processInfo.environment["DM_OPEN_PANEL"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                func statusButton(in view: NSView) -> NSStatusBarButton? {
+                    if let b = view as? NSStatusBarButton { return b }
+                    for sub in view.subviews {
+                        if let b = statusButton(in: sub) { return b }
+                    }
+                    return nil
+                }
+                for window in NSApp.windows
+                where String(describing: type(of: window)).contains("StatusBarWindow") {
+                    if let content = window.contentView,
+                       let button = statusButton(in: content) {
+                        button.performClick(nil)
+                    }
+                }
+            }
+        }
+    }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    @StateObject private var service = DisplayService()
+    @StateObject private var store = {
         let store = ProfileStore()
         store.seedBuiltinLayouts()
-        controller = StatusPanelController(service: DisplayService(), store: store)
-    }
-}
-
-struct DisplayManagerApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+        return store
+    }()
 
     var body: some Scene {
-        Settings { EmptyView() }
+        MenuBarExtra("Display Manager", systemImage: "display.2") {
+            MenuContentView(service: service, store: store)
+        }
+        .menuBarExtraStyle(.window)
     }
 }
