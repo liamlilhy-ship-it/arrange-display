@@ -123,6 +123,13 @@ final class ProfileStore: ObservableObject {
         persist()
     }
 
+    /// Restores a previously captured ordering (ids in desired order).
+    func setOrder(_ ids: [UUID]) {
+        let byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
+        profiles = ids.compactMap { byID[$0] } + profiles.filter { !ids.contains($0.id) }
+        persist()
+    }
+
     func move(id: UUID, toIndex: Int) {
         guard let from = profiles.firstIndex(where: { $0.id == id }),
               from != toIndex, profiles.indices.contains(toIndex) else { return }

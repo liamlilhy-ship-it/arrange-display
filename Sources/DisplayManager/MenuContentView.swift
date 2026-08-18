@@ -21,6 +21,7 @@ struct MenuContentView: View {
     // reorders once, on release — live array moves mid-drag cause jitter.
     @State private var isReordering = false
     @State private var dragState: (id: UUID, startIndex: Int, translation: CGFloat)?
+    @State private var orderBackup: [UUID] = []
 
     private static let nameLimit = 50
     /// Fixed reorder-row height (54) plus the VStack spacing (8).
@@ -35,9 +36,12 @@ struct MenuContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
-                profileRow(profile, index: index)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
+                    profileRow(profile, index: index)
+                }
             }
+            .overlay(alignment: .top) { dragGhost }
 
             if isReordering {
                 HStack {
@@ -45,6 +49,7 @@ struct MenuContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button("Reset") { store.setOrder(orderBackup) }
                     Button("Done") { isReordering = false }
                 }
                 .padding(.horizontal, 12)
@@ -151,10 +156,41 @@ struct MenuContentView: View {
         return 0
     }
 
-    /// Full-size fixed-height row shown in reorder mode.
+    /// Full-size fixed-height row shown in reorder mode. Rows stay static
+    /// (only shifting to make room); a ghost copy follows the cursor.
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
-        return HStack(spacing: 10) {
+        return reorderRowVisual(profile)
+            .opacity(isDragged ? 0.25
+                     : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
+            .offset(y: reorderShift(for: index))
+            .animation(.easeInOut(duration: 0.15), value: dragTargetIndex)
+            .overlay(alignment: .trailing) {
+                Color.clear
+                    .frame(width: 44, height: 54)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { value in
+                                if dragState == nil {
+                                    guard let start = store.profiles.firstIndex(where: { $0.id == profile.id })
+                                    else { return }
+                                    dragState = (profile.id, start, 0)
+                                }
+                                dragState?.translation = value.translation.height
+                            }
+                            .onEnded { _ in
+                                if let dragState, let target = dragTargetIndex {
+                                    store.move(id: dragState.id, toIndex: target)
+                                }
+                                dragState = nil
+                            }
+                    )
+            }
+    }
+
+    private func reorderRowVisual(_ profile: CustomProfile) -> some View {
+        HStack(spacing: 10) {
             ArrangementThumbView(profile: profile)
                 .frame(width: 72, height: 46)
             Text(profile.name)
@@ -163,34 +199,23 @@ struct MenuContentView: View {
             Spacer()
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.secondary)
-                .contentShape(Rectangle().inset(by: -10))
-                .gesture(
-                    DragGesture(minimumDistance: 2)
-                        .onChanged { value in
-                            if dragState == nil {
-                                guard let start = store.profiles.firstIndex(where: { $0.id == profile.id })
-                                else { return }
-                                dragState = (profile.id, start, 0)
-                            }
-                            dragState?.translation = value.translation.height
-                        }
-                        .onEnded { _ in
-                            if let dragState, let target = dragTargetIndex {
-                                store.move(id: dragState.id, toIndex: target)
-                            }
-                            dragState = nil
-                        }
-                )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .frame(height: 54)
-        .background(isDragged ? Color.secondary.opacity(0.15) : .clear,
-                    in: RoundedRectangle(cornerRadius: 6))
-        .opacity(profile.placements(matching: service.displays) != nil ? 1 : 0.5)
-        .offset(y: isDragged ? (dragState?.translation ?? 0) : reorderShift(for: index))
-        .zIndex(isDragged ? 1 : 0)
-        .animation(isDragged ? nil : .easeInOut(duration: 0.15), value: dragTargetIndex)
+    }
+
+    /// Floating copy of the dragged row, following the cursor.
+    @ViewBuilder
+    private var dragGhost: some View {
+        if let dragState,
+           let profile = store.profiles.first(where: { $0.id == dragState.id }) {
+            reorderRowVisual(profile)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                .shadow(radius: 3, y: 1)
+                .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
+                .allowsHitTesting(false)
+        }
     }
 
     /// What the profile needs to fit: its screen counts.
@@ -203,7 +228,10 @@ struct MenuContentView: View {
 
     @ViewBuilder
     private func profileActions(_ profile: CustomProfile) -> some View {
-        Button("Reorder Profiles…") { isReordering = true }
+        Button("Reorder Profiles…") {
+            orderBackup = store.profiles.map(\.id)
+            isReordering = true
+        }
         Button("Rename…") {
             renameText = profile.name
             renameTargetID = profile.id
@@ -258,21 +286,37 @@ struct MenuContentView: View {
                     .frame(width: 72, height: 46)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    // Plain style grows with its content; roundedBorder keeps
-                    // a fixed height in this panel.
-                    TextField("Profile name", text: $newProfileName, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...4)
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
-                        .onChange(of: newProfileName) { _, new in
-                            if new.count > Self.nameLimit {
-                                newProfileName = String(new.prefix(Self.nameLimit))
-                            }
+                    // A TextEditor sized by an invisible text template: the
+                    // template wraps and grows, the editor fills it — so the
+                    // border grows with the content, no inner scrolling.
+                    ZStack(alignment: .topLeading) {
+                        Text(newProfileName.isEmpty ? " " : newProfileName)
+                            .font(.body)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 7)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .opacity(0)
+                        TextEditor(text: $newProfileName)
+                            .font(.body)
+                            .scrollContentBackground(.hidden)
+                            .scrollDisabled(true)
+                            .padding(.vertical, 1)
+                            .padding(.horizontal, 2)
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
+                    .onChange(of: newProfileName) { _, new in
+                        // Return commits instead of inserting a newline.
+                        if new.contains("\n") {
+                            newProfileName = new.replacingOccurrences(of: "\n", with: "")
+                            commitNewProfile()
+                            return
                         }
-                        .onSubmit(commitNewProfile)
+                        if new.count > Self.nameLimit {
+                            newProfileName = String(new.prefix(Self.nameLimit))
+                        }
+                    }
 
                     HStack(spacing: 10) {
                         Text("\(newProfileName.count)/\(Self.nameLimit)")
