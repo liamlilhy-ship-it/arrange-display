@@ -13,10 +13,5 @@ struct DisplayManagerApp: App {
             MenuContentView(service: service, store: store)
         }
         .menuBarExtraStyle(.window)
-
-        Window("Profiles", id: "profiles") {
-            ProfileManagerView(store: store)
-        }
-        .defaultSize(width: 920, height: 480)
     }
 }

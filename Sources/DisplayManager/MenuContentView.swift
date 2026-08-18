@@ -119,7 +119,6 @@ struct ProfileNameEditor: View {
 struct MenuContentView: View {
     @ObservedObject var service: DisplayService
     @ObservedObject var store: ProfileStore
-    @Environment(\.openWindow) private var openWindow
     @State private var errorMessage: String?
     @State private var toastMessage: String?
     @State private var toastDismissTask: Task<Void, Never>?
@@ -186,10 +185,7 @@ struct MenuContentView: View {
             Divider()
 
             HStack {
-                Button("Edit Profiles…") {
-                    openWindow(id: "profiles")
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                Button("Display Settings…", action: openDisplaySettings)
 
                 Spacer()
 
@@ -487,6 +483,29 @@ struct MenuContentView: View {
 
     private func isNameFree(_ name: String, excluding id: UUID? = nil) -> Bool {
         !store.profiles.contains { $0.id != id && $0.name == name }
+    }
+
+    /// Opens System Settings on the Displays pane, then tries to open its
+    /// Arrange sheet via UI scripting. The click needs the user to grant
+    /// Automation permission once; without it the pane still opens.
+    private func openDisplaySettings() {
+        NSWorkspace.shared.open(
+            URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension")!)
+        let script = """
+        tell application "System Events" to tell process "System Settings"
+            repeat 20 times
+                try
+                    click (first button of window 1 whose name begins with "Arrange")
+                    exit repeat
+                end try
+                delay 0.25
+            end repeat
+        end tell
+        """
+        let osascript = Process()
+        osascript.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        osascript.arguments = ["-e", script]
+        try? osascript.run()
     }
 
     // MARK: - Toast & errors
