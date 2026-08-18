@@ -39,6 +39,24 @@ struct TransparentPanel: NSViewRepresentable {
     }
 }
 
+private extension View {
+    /// Control Center-style bubble: a brightened fill plus a light rim.
+    /// Drawn manually because glass effects don't render nested inside the
+    /// panel's own glass sheet.
+    func bubble(_ radius: CGFloat, highlight: Bool = false) -> some View {
+        background(
+            RoundedRectangle(cornerRadius: radius)
+                .fill(Color.white.opacity(highlight ? 0.35 : 0.18)))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius)
+                .strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.12)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
+                .allowsHitTesting(false))
+    }
+}
+
 /// A bordered, wrapping text field that grows in height with its content.
 /// AppKit-backed: SwiftUI's TextField/TextEditor won't reliably auto-grow
 /// inside the MenuBarExtra panel, so the height is measured from the cell.
@@ -213,9 +231,13 @@ struct MenuContentView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset") { store.setOrder(orderBackup) }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4).padding(.horizontal, 10)
+                        .bubble(999)
                     Button("Done") { isReordering = false }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4).padding(.horizontal, 10)
+                        .bubble(999)
                 }
                 .padding(.horizontal, 12)
             } else {
@@ -232,8 +254,12 @@ struct MenuContentView: View {
             Divider()
 
             HStack {
-                Button("Display Settings…", action: openDisplaySettings)
-                    .buttonStyle(.glass)
+                Button(action: openDisplaySettings) {
+                    Text("Display Settings…")
+                        .padding(.vertical, 4).padding(.horizontal, 10)
+                }
+                .buttonStyle(.plain)
+                .bubble(999)
 
                 Spacer()
 
@@ -241,8 +267,14 @@ struct MenuContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Button("Quit") { NSApp.terminate(nil) }
-                    .buttonStyle(.glass)
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Text("Quit")
+                        .padding(.vertical, 4).padding(.horizontal, 10)
+                }
+                .buttonStyle(.plain)
+                .bubble(999)
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
@@ -251,6 +283,10 @@ struct MenuContentView: View {
         // The whole panel is one glass sheet over a transparent window,
         // so the desktop shows through — Control Center style.
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22)
+                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                .allowsHitTesting(false))
         .background(TransparentPanel())
         .overlay(alignment: .bottom) { toastOverlay }
     }
@@ -327,7 +363,7 @@ struct MenuContentView: View {
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
         return reorderRowVisual(profile)
-            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+            .bubble(16)
             .opacity(isDragged ? 0.25
                      : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
             .padding(.horizontal, 10)
@@ -379,7 +415,7 @@ struct MenuContentView: View {
         if let dragState,
            let profile = store.profiles.first(where: { $0.id == dragState.id }) {
             reorderRowVisual(profile)
-                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .bubble(16)
                 .shadow(radius: 3, y: 1)
                 .padding(.horizontal, 10)
                 .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
@@ -441,12 +477,8 @@ struct MenuContentView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
-        // Menu-style hover highlight, drawn inside the glass card.
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.primary.opacity(hovered ? 0.08 : 0)))
+        .bubble(16, highlight: hovered)
         .animation(.easeInOut(duration: 0.12), value: hovered)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
         .opacity(enabled ? 1 : 0.4)
         .padding(.horizontal, 10)
     }
@@ -475,8 +507,11 @@ struct MenuContentView: View {
                 isNamingNewProfile = true
             } label: {
                 Label("Save Current as Profile…", systemImage: "plus.circle")
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.plain)
+            .bubble(999)
             .padding(.horizontal, 10)
         }
     }
@@ -566,7 +601,7 @@ struct MenuContentView: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .glassEffect(.regular, in: .capsule)
+                .bubble(999)
                 .shadow(radius: 3)
                 .padding(.bottom, 44)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
