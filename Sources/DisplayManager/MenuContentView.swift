@@ -216,10 +216,11 @@ struct MenuContentView: View {
     // Row whose … icon is under the pointer, for its own circle highlight.
     @State private var hoveredMenuID: UUID?
 
-    // Settings: frost wash over the sheet (default = Liam's tuned value)
-    // and UI language.
-    static let frostDefault = 0.025
-    @AppStorage("tuneFrost") private var frost = 0.025
+    // Settings: frost level 0–10 over .clear glass (0 = fully clear) and
+    // UI language. 1.4 reproduces the old default look (.regular glass +
+    // 0.025 wash) — calibrated by screenshot brightness measurement.
+    static let frostDefault = 1.4
+    @AppStorage("frostLevel") private var frost = 1.4
     @AppStorage("language") private var language = "en"
     @State private var showingSettings =
         ProcessInfo.processInfo.environment["DM_OPEN_SETTINGS"] != nil
@@ -249,8 +250,8 @@ struct MenuContentView: View {
         // The whole panel is one glass sheet over a transparent window,
         // so the desktop shows through — Control Center style. The frost
         // wash sits between the content and the glass.
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(frost)))
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(frost * 0.06)))
+        .glassEffect(.clear, in: .rect(cornerRadius: 22))
         .overlay(
             RoundedRectangle(cornerRadius: 22)
                 .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
@@ -373,8 +374,8 @@ struct MenuContentView: View {
                 Text(L("Frost", "磨砂"))
                     .font(.subheadline)
                 HStack(spacing: 8) {
-                    Slider(value: $frost, in: 0...0.6)
-                    Text(String(format: "%.2f", frost))
+                    Slider(value: $frost, in: 0...10)
+                    Text(String(format: "%.1f", frost))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(width: 30, alignment: .trailing)
