@@ -194,19 +194,30 @@ struct MenuContentView: View {
     @ViewBuilder
     private var saveCurrentSection: some View {
         if isNamingNewProfile {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 // Live preview of what will be saved: the current arrangement.
                 ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
-                    .frame(width: 72, height: 46)
+                    .frame(width: 56, height: 36)
                 TextField("Profile name", text: $newProfileName)
                     .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: .infinity)
                     .onSubmit(commitNewProfile)
-                Button("Save", action: commitNewProfile)
-                    .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Cancel") {
+                Button(action: commitNewProfile) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                }
+                .buttonStyle(.plain)
+                .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button {
                     isNamingNewProfile = false
                     newProfileName = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
         } else {
@@ -222,14 +233,44 @@ struct MenuContentView: View {
         }
     }
 
-    /// "New Profile", or "New Profile (1)", (2)… when taken.
+    /// Names in the built-in convention ("Dual external, built-in right"),
+    /// derived from the current arrangement; (1), (2)… appended when taken.
     private func suggestedProfileName() -> String {
+        let base = Self.arrangementName(for: service.displays)
         let names = Set(store.profiles.map(\.name))
-        let base = "New Profile"
         guard names.contains(base) else { return base }
         var i = 1
         while names.contains("\(base) (\(i))") { i += 1 }
         return "\(base) (\(i))"
+    }
+
+    static func arrangementName(for displays: [DisplayInfo]) -> String {
+        let externals = displays.filter { !$0.isBuiltin && $0.mirrorSourceID == nil }
+        let mirrored = displays.contains { $0.mirrorSourceID != nil }
+        var parts: [String] = []
+        switch externals.count {
+        case 0: break
+        case 1: parts.append("Single external")
+        case 2: parts.append("Dual external")
+        case 3: parts.append("Triple external")
+        default: parts.append("\(externals.count) externals")
+        }
+        if let builtin = displays.first(where: { $0.isBuiltin && $0.mirrorSourceID == nil }) {
+            if externals.isEmpty {
+                parts.append("Laptop only")
+            } else {
+                // Which side of the externals the laptop sits on
+                // (global display space: y grows downward).
+                let box = externals.map(\.bounds).reduce(CGRect.null) { $0.union($1) }
+                let dx = builtin.bounds.midX - box.midX
+                let dy = builtin.bounds.midY - box.midY
+                let side = abs(dy) >= abs(dx) ? (dy >= 0 ? "bottom" : "top")
+                                              : (dx >= 0 ? "right" : "left")
+                parts.append("built-in \(side)")
+            }
+        }
+        if mirrored { parts.append("mirrored") }
+        return parts.isEmpty ? "New Profile" : parts.joined(separator: ", ")
     }
 
     private func commitNewProfile() {
