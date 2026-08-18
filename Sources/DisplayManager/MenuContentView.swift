@@ -39,21 +39,35 @@ struct TransparentPanel: NSViewRepresentable {
     }
 }
 
+/// Control Center-style bubble: a brightened fill plus a light rim.
+/// Drawn manually because glass effects don't render nested inside the
+/// panel's own glass sheet. Opacities are tunable live via the temporary
+/// "Tune" sliders (persisted in UserDefaults).
+private struct Bubble: ViewModifier {
+    var radius: CGFloat
+    var highlight: Bool
+    @AppStorage("tuneBubbleFill") private var fill = 0.18
+    @AppStorage("tuneBubbleRim") private var rim = 0.55
+    @AppStorage("tuneHover") private var hover = 0.35
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: radius)
+                    .fill(Color.white.opacity(highlight ? hover : fill)))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius)
+                    .strokeBorder(
+                        LinearGradient(colors: [.white.opacity(rim), .white.opacity(rim * 0.22)],
+                                       startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                    .allowsHitTesting(false))
+    }
+}
+
 private extension View {
-    /// Control Center-style bubble: a brightened fill plus a light rim.
-    /// Drawn manually because glass effects don't render nested inside the
-    /// panel's own glass sheet.
     func bubble(_ radius: CGFloat, highlight: Bool = false) -> some View {
-        background(
-            RoundedRectangle(cornerRadius: radius)
-                .fill(Color.white.opacity(highlight ? 0.35 : 0.18)))
-        .overlay(
-            RoundedRectangle(cornerRadius: radius)
-                .strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.12)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1)
-                .allowsHitTesting(false))
+        modifier(Bubble(radius: radius, highlight: highlight))
     }
 }
 
@@ -194,6 +208,13 @@ struct MenuContentView: View {
     // Row under the pointer, for the menu-style hover highlight.
     @State private var hoveredID: UUID?
 
+    // Temporary design-tuning sliders (shared with Bubble via UserDefaults).
+    @AppStorage("tuneBubbleFill") private var tuneBubbleFill = 0.18
+    @AppStorage("tuneBubbleRim") private var tuneBubbleRim = 0.55
+    @AppStorage("tuneHover") private var tuneHover = 0.35
+    @AppStorage("tuneFrost") private var tuneFrost = 0.0
+    @AppStorage("tuneDim") private var tuneDim = 0.0
+
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
     // The dragged row floats with the finger; neighbors shift; the array
     // reorders once, on release — live array moves mid-drag cause jitter.
@@ -253,6 +274,21 @@ struct MenuContentView: View {
 
             Divider()
 
+            // Temporary: live design tuning. Values persist in UserDefaults.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tune (temporary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                tuneRow("Bubble", $tuneBubbleFill, 0...0.6)
+                tuneRow("Rim", $tuneBubbleRim, 0...1)
+                tuneRow("Hover", $tuneHover, 0...0.6)
+                tuneRow("Frost", $tuneFrost, 0...0.6)
+                tuneRow("Dim", $tuneDim, 0...0.5)
+            }
+            .padding(.horizontal, 12)
+
+            Divider()
+
             HStack {
                 Button(action: openDisplaySettings) {
                     Text("Display Settings…")
@@ -281,7 +317,10 @@ struct MenuContentView: View {
         }
         .frame(width: 300)
         // The whole panel is one glass sheet over a transparent window,
-        // so the desktop shows through — Control Center style.
+        // so the desktop shows through — Control Center style. Frost and
+        // dim washes sit between the content and the glass.
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(tuneFrost)))
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.black.opacity(tuneDim)))
         .glassEffect(.regular, in: .rect(cornerRadius: 22))
         .overlay(
             RoundedRectangle(cornerRadius: 22)
@@ -582,6 +621,20 @@ struct MenuContentView: View {
 
     private func isNameFree(_ name: String, excluding id: UUID? = nil) -> Bool {
         !store.profiles.contains { $0.id != id && $0.name == name }
+    }
+
+    private func tuneRow(_ label: String, _ value: Binding<Double>,
+                         _ range: ClosedRange<Double>) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption)
+                .frame(width: 44, alignment: .leading)
+            Slider(value: value, in: range)
+            Text(String(format: "%.2f", value.wrappedValue))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 30, alignment: .trailing)
+        }
     }
 
     /// Opens System Settings on the Displays pane. Clicking through to the
