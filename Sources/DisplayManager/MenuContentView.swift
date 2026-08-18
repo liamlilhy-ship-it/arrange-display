@@ -46,9 +46,10 @@ struct TransparentPanel: NSViewRepresentable {
 private struct Bubble: ViewModifier {
     var radius: CGFloat
     var highlight: Bool
-    @AppStorage("tuneBubbleFill") private var fill = 0.18
-    @AppStorage("tuneBubbleRim") private var rim = 0.55
-    @AppStorage("tuneHover") private var hover = 0.35
+    // Liam's tuned values, baked in.
+    private let fill = 0.06
+    private let rim = 0.65
+    private let hover = 0.30
 
     func body(content: Content) -> some View {
         content
@@ -208,12 +209,13 @@ struct MenuContentView: View {
     // Row under the pointer, for the menu-style hover highlight.
     @State private var hoveredID: UUID?
 
-    // Temporary design-tuning sliders (shared with Bubble via UserDefaults).
-    @AppStorage("tuneBubbleFill") private var tuneBubbleFill = 0.18
-    @AppStorage("tuneBubbleRim") private var tuneBubbleRim = 0.55
-    @AppStorage("tuneHover") private var tuneHover = 0.35
-    @AppStorage("tuneFrost") private var tuneFrost = 0.0
-    @AppStorage("tuneDim") private var tuneDim = 0.0
+    // Settings: frost wash over the sheet (default = Liam's tuned value)
+    // and UI language.
+    static let frostDefault = 0.025
+    @AppStorage("tuneFrost") private var frost = 0.025
+    @AppStorage("language") private var language = "en"
+    @State private var showingSettings =
+        ProcessInfo.processInfo.environment["DM_OPEN_SETTINGS"] != nil
 
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
     // The dragged row floats with the finger; neighbors shift; the array
@@ -229,11 +231,43 @@ struct MenuContentView: View {
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
     var body: some View {
+        Group {
+            if showingSettings {
+                settingsContent
+            } else {
+                mainContent
+            }
+        }
+        .frame(width: 300)
+        // The whole panel is one glass sheet over a transparent window,
+        // so the desktop shows through — Control Center style. The frost
+        // wash sits between the content and the glass.
+        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(frost)))
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22)
+                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                .allowsHitTesting(false))
+        .background(TransparentPanel())
+        .overlay(alignment: .bottom) { toastOverlay }
+    }
+
+    private var mainContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Profiles")
-                .font(.headline)
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
+            HStack {
+                Text(L("Profiles", "配置"))
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
 
             // Liquid Glass: rows are standalone glass cards. No
             // GlassEffectContainer — it lifts glass above sibling overlays,
@@ -247,15 +281,15 @@ struct MenuContentView: View {
 
             if isReordering {
                 HStack {
-                    Text("Drag the handles to reorder")
+                    Text(L("Drag the handles to reorder", "拖动手柄调整顺序"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Reset") { store.setOrder(orderBackup) }
+                    Button(L("Reset", "重置")) { store.setOrder(orderBackup) }
                         .buttonStyle(.plain)
                         .padding(.vertical, 4).padding(.horizontal, 10)
                         .bubble(999)
-                    Button("Done") { isReordering = false }
+                    Button(L("Done", "完成")) { isReordering = false }
                         .buttonStyle(.plain)
                         .padding(.vertical, 4).padding(.horizontal, 10)
                         .bubble(999)
@@ -274,24 +308,9 @@ struct MenuContentView: View {
 
             Divider()
 
-            // Temporary: live design tuning. Values persist in UserDefaults.
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Tune (temporary)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                tuneRow("Bubble", $tuneBubbleFill, 0...0.6)
-                tuneRow("Rim", $tuneBubbleRim, 0...1)
-                tuneRow("Hover", $tuneHover, 0...0.6)
-                tuneRow("Frost", $tuneFrost, 0...0.6)
-                tuneRow("Dim", $tuneDim, 0...0.5)
-            }
-            .padding(.horizontal, 12)
-
-            Divider()
-
             HStack {
                 Button(action: openDisplaySettings) {
-                    Text("Display Settings…")
+                    Text(L("Display Settings…", "显示器设置…"))
                         .padding(.vertical, 4).padding(.horizontal, 10)
                 }
                 .buttonStyle(.plain)
@@ -299,14 +318,15 @@ struct MenuContentView: View {
 
                 Spacer()
 
-                Text("\(externalCount) external\(externalCount == 1 ? "" : "s")")
+                Text(language == "zh" ? "\(externalCount) 个外接屏"
+                                      : "\(externalCount) external\(externalCount == 1 ? "" : "s")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 Button {
                     NSApp.terminate(nil)
                 } label: {
-                    Text("Quit")
+                    Text(L("Quit", "退出"))
                         .padding(.vertical, 4).padding(.horizontal, 10)
                 }
                 .buttonStyle(.plain)
@@ -315,19 +335,75 @@ struct MenuContentView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
         }
-        .frame(width: 300)
-        // The whole panel is one glass sheet over a transparent window,
-        // so the desktop shows through — Control Center style. Frost and
-        // dim washes sit between the content and the glass.
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(tuneFrost)))
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.black.opacity(tuneDim)))
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
-                .allowsHitTesting(false))
-        .background(TransparentPanel())
-        .overlay(alignment: .bottom) { toastOverlay }
+    }
+
+    // MARK: - Settings
+
+    private var settingsContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Button {
+                    showingSettings = false
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                Text(L("Settings", "设置"))
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("Frost", "磨砂"))
+                    .font(.subheadline)
+                HStack(spacing: 8) {
+                    Slider(value: $frost, in: 0...0.6)
+                    Text(String(format: "%.2f", frost))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, alignment: .trailing)
+                }
+                HStack {
+                    Spacer()
+                    Button(L("Default", "默认")) { frost = Self.frostDefault }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4).padding(.horizontal, 10)
+                        .bubble(999)
+                    Button(L("Save", "保存")) {
+                        showingSettings = false
+                        showToast(L("Saved", "已保存"))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 4).padding(.horizontal, 10)
+                    .bubble(999)
+                }
+            }
+            .padding(10)
+            .bubble(16)
+            .padding(.horizontal, 10)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("Language", "语言"))
+                    .font(.subheadline)
+                Picker("", selection: $language) {
+                    Text("English").tag("en")
+                    Text("中文").tag("zh")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .padding(10)
+            .bubble(16)
+            .padding(.horizontal, 10)
+        }
+        .padding(.bottom, 10)
+    }
+
+    private func L(_ en: String, _ zh: String) -> String {
+        language == "zh" ? zh : en
     }
 
     // MARK: - Rows
@@ -361,7 +437,7 @@ struct MenuContentView: View {
                 guard !isReordering else { return }
                 attempt {
                     try service.apply(profile: profile)
-                    showToast("Applied “\(profile.name)”")
+                    showToast(L("Applied “\(profile.name)”", "已应用“\(profile.name)”"))
                 }
             }
             .onHover { hoveredID = $0 ? profile.id : nil }
@@ -465,22 +541,25 @@ struct MenuContentView: View {
     /// What the profile needs to fit: its screen counts.
     private func subtitle(for profile: CustomProfile) -> String {
         let externals = profile.displays.filter { !$0.isBuiltin }.count
-        var parts = ["\(externals) external\(externals == 1 ? "" : "s")"]
-        if profile.displays.contains(where: \.isBuiltin) { parts.append("laptop") }
+        var parts = [language == "zh" ? "\(externals) 个外接屏"
+                                      : "\(externals) external\(externals == 1 ? "" : "s")"]
+        if profile.displays.contains(where: \.isBuiltin) {
+            parts.append(L("laptop", "笔记本"))
+        }
         return parts.joined(separator: " + ")
     }
 
     @ViewBuilder
     private func profileActions(_ profile: CustomProfile) -> some View {
-        Button("Reorder") {
+        Button(L("Reorder", "排序")) {
             orderBackup = store.profiles.map(\.id)
             isReordering = true
         }
-        Button("Rename") {
+        Button(L("Rename", "重命名")) {
             renameText = profile.name
             renameTargetID = profile.id
         }
-        Button("Delete", role: .destructive) {
+        Button(L("Delete", "删除"), role: .destructive) {
             store.delete(id: profile.id)
         }
     }
@@ -545,7 +624,7 @@ struct MenuContentView: View {
                 newProfileName = suggestedProfileName()
                 isNamingNewProfile = true
             } label: {
-                Label("Save Current as Profile…", systemImage: "plus.circle")
+                Label(L("Save Current as Profile…", "将当前排列存为配置…"), systemImage: "plus.circle")
                     .padding(.vertical, 6)
                     .padding(.horizontal, 12)
             }
@@ -599,20 +678,20 @@ struct MenuContentView: View {
         let name = newProfileName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         guard isNameFree(name) else {
-            nameWarning = "A profile with this name already exists"
+            nameWarning = L("A profile with this name already exists", "已存在同名配置")
             return
         }
         store.add(CustomProfile.capture(name: name, displays: service.displays))
         isNamingNewProfile = false
         newProfileName = ""
-        showToast("Saved “\(name)”")
+        showToast(L("Saved “\(name)”", "已保存“\(name)”"))
     }
 
     private func commitRename(_ profile: CustomProfile) {
         let name = renameText.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         guard isNameFree(name, excluding: profile.id) else {
-            nameWarning = "A profile with this name already exists"
+            nameWarning = L("A profile with this name already exists", "已存在同名配置")
             return
         }
         store.rename(id: profile.id, to: name)
@@ -623,19 +702,6 @@ struct MenuContentView: View {
         !store.profiles.contains { $0.id != id && $0.name == name }
     }
 
-    private func tuneRow(_ label: String, _ value: Binding<Double>,
-                         _ range: ClosedRange<Double>) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .frame(width: 44, alignment: .leading)
-            Slider(value: value, in: range)
-            Text(String(format: "%.2f", value.wrappedValue))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 30, alignment: .trailing)
-        }
-    }
 
     /// Opens System Settings on the Displays pane. Clicking through to the
     /// Arrange sheet would need UI scripting and an Automation permission
