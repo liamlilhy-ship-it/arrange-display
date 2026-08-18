@@ -257,7 +257,12 @@ struct MenuContentView: View {
                 .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
                 .allowsHitTesting(false))
         .background(TransparentPanel())
-        .overlay(alignment: .bottom) { toastOverlay }
+        // Debug: DM_TOAST=<text> shows a toast on open, for screenshots.
+        .onAppear {
+            if let text = ProcessInfo.processInfo.environment["DM_TOAST"] {
+                showToast(text)
+            }
+        }
     }
 
     private var mainContent: some View {
@@ -276,6 +281,8 @@ struct MenuContentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
+
+            toastBanner
 
             // Liquid Glass: rows are standalone glass cards. No
             // GlassEffectContainer — it lifts glass above sibling overlays,
@@ -369,6 +376,8 @@ struct MenuContentView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
+
+            toastBanner
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(L("Frost", "磨砂"))
@@ -734,17 +743,24 @@ struct MenuContentView: View {
 
     // MARK: - Toast & errors
 
+    /// Inline banner at the top of the panel: takes its own layout space
+    /// (pushing content down) so it never covers other text.
     @ViewBuilder
-    private var toastOverlay: some View {
+    private var toastBanner: some View {
         if let toastMessage {
-            Text(toastMessage)
-                .font(.callout)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .bubble(999)
-                .shadow(radius: 3)
-                .padding(.bottom, 44)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(toastMessage)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .bubble(999)
+            .padding(.horizontal, 10)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
