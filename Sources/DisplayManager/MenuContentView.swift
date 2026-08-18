@@ -134,6 +134,9 @@ struct MenuContentView: View {
     // Duplicate-name warning shown in whichever name editor is open.
     @State private var nameWarning: String?
 
+    // Row under the pointer, for the menu-style hover highlight.
+    @State private var hoveredID: UUID?
+
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
     // The dragged row floats with the finger; neighbors shift; the array
     // reorders once, on release — live array moves mid-drag cause jitter.
@@ -234,6 +237,7 @@ struct MenuContentView: View {
                 title: profile.name,
                 subtitle: subtitle(for: profile),
                 enabled: applicable,
+                hovered: hoveredID == profile.id,
                 thumb: ArrangementThumbView(profile: profile)
             ) {
                 guard !isReordering else { return }
@@ -242,6 +246,7 @@ struct MenuContentView: View {
                     showToast("Applied “\(profile.name)”")
                 }
             }
+            .onHover { hoveredID = $0 ? profile.id : nil }
             .overlay(alignment: .trailing) {
                 Menu {
                     profileActions(profile)
@@ -279,7 +284,7 @@ struct MenuContentView: View {
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
         return reorderRowVisual(profile)
-            .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .rect(cornerRadius: 12))
+            .glassEffect(.clear, in: .rect(cornerRadius: 12))
             .opacity(isDragged ? 0.25
                      : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
             .padding(.horizontal, 10)
@@ -331,7 +336,7 @@ struct MenuContentView: View {
         if let dragState,
            let profile = store.profiles.first(where: { $0.id == dragState.id }) {
             reorderRowVisual(profile)
-                .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .rect(cornerRadius: 12))
+                .glassEffect(.clear, in: .rect(cornerRadius: 12))
                 .shadow(radius: 3, y: 1)
                 .padding(.horizontal, 10)
                 .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
@@ -363,7 +368,7 @@ struct MenuContentView: View {
     }
 
     private func profileButton(
-        title: String, subtitle: String?, enabled: Bool,
+        title: String, subtitle: String?, enabled: Bool, hovered: Bool,
         thumb: ArrangementThumbView, action: @escaping () -> Void
     ) -> some View {
         // Not .disabled: grayed rows must stay draggable for reordering,
@@ -393,7 +398,12 @@ struct MenuContentView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.tint(.primary.opacity(0.1)).interactive(), in: .rect(cornerRadius: 12))
+        // Menu-style hover highlight, drawn inside the glass card.
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.primary.opacity(hovered ? 0.08 : 0)))
+        .animation(.easeInOut(duration: 0.12), value: hovered)
+        .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 12))
         .opacity(enabled ? 1 : 0.4)
         .padding(.horizontal, 10)
     }
@@ -513,7 +523,7 @@ struct MenuContentView: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .capsule)
+                .glassEffect(.clear, in: .capsule)
                 .shadow(radius: 3)
                 .padding(.bottom, 44)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
