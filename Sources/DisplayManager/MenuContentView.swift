@@ -268,7 +268,7 @@ struct MenuContentView: View {
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(L("Profiles", "配置"))
+                Text(L("Presets", "配置"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -654,7 +654,7 @@ struct MenuContentView: View {
                 newProfileName = suggestedProfileName()
                 isNamingNewProfile = true
             } label: {
-                Label(L("Save Current as Profile…", "将当前排列存为配置…"), systemImage: "plus.circle")
+                Label(L("Save Current as Preset…", "将当前排列存为配置…"), systemImage: "plus.circle")
                     .padding(.vertical, 6)
                     .padding(.horizontal, 12)
             }
@@ -701,14 +701,14 @@ struct MenuContentView: View {
             }
         }
         if mirrored { parts.append("mirrored") }
-        return parts.isEmpty ? "New Profile" : parts.joined(separator: ", ")
+        return parts.isEmpty ? "New Preset" : parts.joined(separator: ", ")
     }
 
     private func commitNewProfile() {
         let name = newProfileName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         guard isNameFree(name) else {
-            nameWarning = L("A profile with this name already exists", "已存在同名配置")
+            nameWarning = L("A preset with this name already exists", "已存在同名配置")
             return
         }
         store.add(CustomProfile.capture(name: name, displays: service.displays))
@@ -721,7 +721,7 @@ struct MenuContentView: View {
         let name = renameText.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         guard isNameFree(name, excluding: profile.id) else {
-            nameWarning = L("A profile with this name already exists", "已存在同名配置")
+            nameWarning = L("A preset with this name already exists", "已存在同名配置")
             return
         }
         store.rename(id: profile.id, to: name)
