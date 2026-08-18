@@ -154,16 +154,15 @@ struct MenuContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            // Liquid Glass: rows are glass cards; the shared container lets
-            // nearby shapes blend while the drag ghost floats over them.
-            GlassEffectContainer(spacing: 8) {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
-                        profileRow(profile, index: index)
-                    }
+            // Liquid Glass: rows are standalone glass cards. No
+            // GlassEffectContainer — it lifts glass above sibling overlays,
+            // which hid each row's … menu.
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
+                    profileRow(profile, index: index)
                 }
-                .overlay(alignment: .top) { dragGhost }
             }
+            .overlay(alignment: .top) { dragGhost }
 
             if isReordering {
                 HStack {
@@ -280,7 +279,7 @@ struct MenuContentView: View {
     private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
         let isDragged = dragState?.id == profile.id
         return reorderRowVisual(profile)
-            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+            .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .rect(cornerRadius: 12))
             .opacity(isDragged ? 0.25
                      : profile.placements(matching: service.displays) != nil ? 1 : 0.5)
             .padding(.horizontal, 10)
@@ -332,7 +331,7 @@ struct MenuContentView: View {
         if let dragState,
            let profile = store.profiles.first(where: { $0.id == dragState.id }) {
             reorderRowVisual(profile)
-                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .rect(cornerRadius: 12))
                 .shadow(radius: 3, y: 1)
                 .padding(.horizontal, 10)
                 .offset(y: CGFloat(dragState.startIndex) * Self.reorderRowStep + dragState.translation)
@@ -394,7 +393,7 @@ struct MenuContentView: View {
             .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+        .glassEffect(.regular.tint(.primary.opacity(0.1)).interactive(), in: .rect(cornerRadius: 12))
         .opacity(enabled ? 1 : 0.4)
         .padding(.horizontal, 10)
     }
@@ -514,7 +513,7 @@ struct MenuContentView: View {
                 .font(.callout)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .glassEffect(.regular, in: .capsule)
+                .glassEffect(.regular.tint(.primary.opacity(0.1)), in: .capsule)
                 .shadow(radius: 3)
                 .padding(.bottom, 44)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
