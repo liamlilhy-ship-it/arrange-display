@@ -17,14 +17,14 @@ struct MenuContentView: View {
     @State private var renameText = ""
 
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
+    // The dragged row floats with the finger; neighbors shift; the array
+    // reorders once, on release — live array moves mid-drag cause jitter.
     @State private var isReordering = false
-    @State private var draggedID: UUID?
-    @State private var dragStartIndex: Int?
+    @State private var dragState: (id: UUID, startIndex: Int, translation: CGFloat)?
 
-    /// Saved names must fit two lines in the 300pt menu row.
-    private static let nameLimit = 48
-    /// Fixed height of a reorder-mode row plus the VStack spacing between rows.
-    private static let reorderRowStep: CGFloat = 48
+    private static let nameLimit = 50
+    /// Fixed reorder-row height (54) plus the VStack spacing (8).
+    private static let reorderRowStep: CGFloat = 62
 
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
@@ -35,8 +35,8 @@ struct MenuContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            ForEach(store.profiles) { profile in
-                profileRow(profile)
+            ForEach(Array(store.profiles.enumerated()), id: \.element.id) { index, profile in
+                profileRow(profile, index: index)
             }
 
             if isReordering {
@@ -85,9 +85,9 @@ struct MenuContentView: View {
     // MARK: - Rows
 
     @ViewBuilder
-    private func profileRow(_ profile: CustomProfile) -> some View {
+    private func profileRow(_ profile: CustomProfile, index: Int) -> some View {
         if isReordering {
-            reorderRow(profile)
+            reorderRow(profile, index: index)
         } else if renameTargetID == profile.id {
             HStack(spacing: 10) {
                 ArrangementThumbView(profile: profile)
@@ -135,43 +135,62 @@ struct MenuContentView: View {
         }
     }
 
-    /// Compact fixed-height row shown in reorder mode. The handle drives a
-    /// plain drag gesture — rows swap live as the drag crosses row steps.
-    private func reorderRow(_ profile: CustomProfile) -> some View {
-        HStack(spacing: 10) {
+    /// Index the dragged row would land on if released now.
+    private var dragTargetIndex: Int? {
+        guard let dragState else { return nil }
+        let steps = Int((dragState.translation / Self.reorderRowStep).rounded())
+        return max(0, min(store.profiles.count - 1, dragState.startIndex + steps))
+    }
+
+    /// How far a non-dragged row slides to make room for the dragged one.
+    private func reorderShift(for index: Int) -> CGFloat {
+        guard let dragState, let target = dragTargetIndex, index != dragState.startIndex
+        else { return 0 }
+        if dragState.startIndex < index, target >= index { return -Self.reorderRowStep }
+        if index < dragState.startIndex, target <= index { return Self.reorderRowStep }
+        return 0
+    }
+
+    /// Full-size fixed-height row shown in reorder mode.
+    private func reorderRow(_ profile: CustomProfile, index: Int) -> some View {
+        let isDragged = dragState?.id == profile.id
+        return HStack(spacing: 10) {
             ArrangementThumbView(profile: profile)
-                .frame(width: 48, height: 30)
+                .frame(width: 72, height: 46)
             Text(profile.name)
-                .lineLimit(1)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
             Spacer()
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.secondary)
-                .contentShape(Rectangle().inset(by: -8))
+                .contentShape(Rectangle().inset(by: -10))
                 .gesture(
                     DragGesture(minimumDistance: 2)
                         .onChanged { value in
-                            if dragStartIndex == nil {
-                                dragStartIndex = store.profiles.firstIndex { $0.id == profile.id }
-                                draggedID = profile.id
+                            if dragState == nil {
+                                guard let start = store.profiles.firstIndex(where: { $0.id == profile.id })
+                                else { return }
+                                dragState = (profile.id, start, 0)
                             }
-                            guard let start = dragStartIndex else { return }
-                            let steps = Int((value.translation.height / Self.reorderRowStep).rounded())
-                            let target = max(0, min(store.profiles.count - 1, start + steps))
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                store.move(id: profile.id, toIndex: target)
-                            }
+                            dragState?.translation = value.translation.height
                         }
                         .onEnded { _ in
-                            dragStartIndex = nil
-                            draggedID = nil
+                            if let dragState, let target = dragTargetIndex {
+                                store.move(id: dragState.id, toIndex: target)
+                            }
+                            dragState = nil
                         }
                 )
         }
         .padding(.horizontal, 12)
-        .frame(height: 40)
-        .background(draggedID == profile.id ? Color.secondary.opacity(0.15) : .clear,
+        .padding(.vertical, 4)
+        .frame(height: 54)
+        .background(isDragged ? Color.secondary.opacity(0.15) : .clear,
                     in: RoundedRectangle(cornerRadius: 6))
         .opacity(profile.placements(matching: service.displays) != nil ? 1 : 0.5)
+        .offset(y: isDragged ? (dragState?.translation ?? 0) : reorderShift(for: index))
+        .zIndex(isDragged ? 1 : 0)
+        .animation(isDragged ? nil : .easeInOut(duration: 0.15), value: dragTargetIndex)
     }
 
     /// What the profile needs to fit: its screen counts.
@@ -208,6 +227,7 @@ struct MenuContentView: View {
                     Text(title)
                         .font(.body)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.85)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                     if let subtitle {
@@ -232,45 +252,51 @@ struct MenuContentView: View {
     @ViewBuilder
     private var saveCurrentSection: some View {
         if isNamingNewProfile {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    // Live preview of what will be saved: the current arrangement.
-                    ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
-                        .frame(width: 72, height: 46)
-                    Spacer()
-                    Button(action: commitNewProfile) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button {
-                        isNamingNewProfile = false
-                        newProfileName = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
+            HStack(alignment: .top, spacing: 10) {
+                // Live preview of what will be saved: the current arrangement.
+                ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
+                    .frame(width: 72, height: 46)
 
-                TextField("Profile name", text: $newProfileName, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...3)
-                    .frame(maxWidth: .infinity)
-                    .onChange(of: newProfileName) { _, new in
-                        if new.count > Self.nameLimit {
-                            newProfileName = String(new.prefix(Self.nameLimit))
+                VStack(alignment: .leading, spacing: 6) {
+                    // Plain style grows with its content; roundedBorder keeps
+                    // a fixed height in this panel.
+                    TextField("Profile name", text: $newProfileName, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...4)
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.4), lineWidth: 1))
+                        .onChange(of: newProfileName) { _, new in
+                            if new.count > Self.nameLimit {
+                                newProfileName = String(new.prefix(Self.nameLimit))
+                            }
                         }
-                    }
-                    .onSubmit(commitNewProfile)
+                        .onSubmit(commitNewProfile)
 
-                Text("\(newProfileName.count)/\(Self.nameLimit)")
-                    .font(.caption2)
-                    .foregroundStyle(newProfileName.count >= Self.nameLimit ? .red : .secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    HStack(spacing: 10) {
+                        Text("\(newProfileName.count)/\(Self.nameLimit)")
+                            .font(.caption2)
+                            .foregroundStyle(newProfileName.count >= Self.nameLimit ? .red : .secondary)
+                        Spacer()
+                        Button(action: commitNewProfile) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.green)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(newProfileName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        Button {
+                            isNamingNewProfile = false
+                            newProfileName = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             .padding(.horizontal, 12)
         } else {
