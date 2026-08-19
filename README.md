@@ -39,9 +39,9 @@ Three presets ship with the app (they can be renamed, reordered, or deleted like
 
 | Preset | Needs | Arrangement |
 |---|---|---|
-| External above, built-in below | 1 external + laptop | External on top (main), laptop centered underneath |
-| Dual external, built-in right | 2 externals + laptop | Two externals side by side (left one main), laptop to the right |
-| Dual external, built-in bottom | 2 externals + laptop | Two externals side by side (left one main), laptop bottom-middle |
+| 1 external, built-in bottom | 1 external + laptop | External on top (main), laptop centered underneath |
+| 2 externals, built-in right | 2 externals + laptop | Two externals side by side (left one main), laptop to the right |
+| 2 externals, built-in bottom | 2 externals + laptop | Two externals side by side (left one main), laptop bottom-middle |
 
 Presets that don't fit the currently connected screens appear dimmed until the matching monitors are plugged in.
 

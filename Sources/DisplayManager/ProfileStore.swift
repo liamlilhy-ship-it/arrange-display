@@ -21,10 +21,23 @@ final class ProfileStore: ObservableObject {
         profiles = decoded.map(Self.normalized)
     }
 
+    /// Older auto-generated names spelled counts out ("Dual external");
+    /// the convention is numeric now. Applied to stored names on load so
+    /// old saves stay consistent with new ones.
+    private static let nameMigrations = [
+        ("External above, built-in below", "1 external, built-in bottom"),
+        ("Single external", "1 external"),
+        ("Dual external", "2 externals"),
+        ("Triple external", "3 externals"),
+    ]
+
     /// Older files stored mirror links by hardware UUID; convert to the
     /// structural index form.
     private static func normalized(_ profile: CustomProfile) -> CustomProfile {
         var profile = profile
+        for (old, new) in nameMigrations {
+            profile.name = profile.name.replacingOccurrences(of: old, with: new)
+        }
         for i in profile.displays.indices {
             if profile.displays[i].mirrorSourceIndex == nil,
                let uuid = profile.displays[i].mirrorSourceUUID {

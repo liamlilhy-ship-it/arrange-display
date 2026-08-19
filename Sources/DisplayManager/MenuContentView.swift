@@ -49,7 +49,10 @@ private struct Bubble: ViewModifier {
     // Liam's tuned values, baked in.
     private let fill = 0.06
     private let rim = 0.65
-    private let hover = 0.30
+    // Hover brightening reads stronger without the glass sheet behind
+    // it, so the clear style uses a gentler value.
+    @AppStorage("panelStyle") private var panelStyle = "blur"
+    private var hover: Double { panelStyle == "clear" ? 0.18 : 0.30 }
     // Every bubble brightens under the pointer on its own.
     @State private var isHovering = false
 
@@ -216,11 +219,15 @@ struct MenuContentView: View {
     // Row whose … icon is under the pointer, for its own circle highlight.
     @State private var hoveredMenuID: UUID?
 
-    // Settings: frost level 0–10 over .clear glass (0 = fully clear) and
-    // UI language. 1.4 reproduces the old default look (.regular glass +
-    // 0.025 wash) — calibrated by screenshot brightness measurement.
+    // Settings: panel style and per-style frost levels (0–10), plus UI
+    // language. "blur" is the glass sheet with a white wash (default 1.4
+    // reproduces the old .regular look — screenshot-calibrated). "clear"
+    // drops the glass entirely: a black dim wash and forced white text.
     static let frostDefault = 1.4
+    static let clearDimDefault = 6.5
+    @AppStorage("panelStyle") private var panelStyle = "blur"
     @AppStorage("frostLevel") private var frost = 1.4
+    @AppStorage("clearDimLevel") private var clearDim = 6.5
     @AppStorage("language") private var language = "en"
     @State private var showingSettings =
         ProcessInfo.processInfo.environment["DM_OPEN_SETTINGS"] != nil
@@ -228,30 +235,24 @@ struct MenuContentView: View {
     // Reorder mode: entered from a row's ... menu; rows show drag handles.
     // The dragged row floats with the finger; neighbors shift; the array
     // reorders once, on release — live array moves mid-drag cause jitter.
-    @State private var isReordering = false
+    // Debug: DM_REORDER=1 opens in reorder mode, for screenshots.
+    @State private var isReordering =
+        ProcessInfo.processInfo.environment["DM_REORDER"] != nil
     @State private var dragState: (id: UUID, startIndex: Int, translation: CGFloat)?
     @State private var orderBackup: [UUID] = []
 
-    private static let nameLimit = 50
+    /// Roomy enough for auto-suggested names with a (n) suffix; names
+    /// longer than two row lines truncate with an ellipsis.
+    private static let nameLimit = 45
     /// Fixed reorder-row height (54) plus the VStack spacing (8).
     private static let reorderRowStep: CGFloat = 62
 
     private var externalCount: Int { service.displays.filter { !$0.isBuiltin }.count }
 
+    private var isClearStyle: Bool { panelStyle == "clear" }
+
     var body: some View {
-        Group {
-            if showingSettings {
-                settingsContent
-            } else {
-                mainContent
-            }
-        }
-        .frame(width: 300)
-        // The whole panel is one glass sheet over a transparent window,
-        // so the desktop shows through — Control Center style. The frost
-        // wash sits between the content and the glass.
-        .background(RoundedRectangle(cornerRadius: 22).fill(Color.white.opacity(frost * 0.06)))
-        .glassEffect(.clear, in: .rect(cornerRadius: 22))
+        styledPanel
         .overlay(
             RoundedRectangle(cornerRadius: 22)
                 .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
@@ -262,6 +263,34 @@ struct MenuContentView: View {
             if let text = ProcessInfo.processInfo.environment["DM_TOAST"] {
                 showToast(text)
             }
+        }
+    }
+
+    /// The panel sheet in the selected style. Blur: white frost wash over
+    /// a glass sheet, so the desktop blurs through — Control Center style.
+    /// Clear: no glass at all, a black dim wash, and dark-mode (white)
+    /// text regardless of the system appearance.
+    @ViewBuilder
+    private var styledPanel: some View {
+        let base = Group {
+            if showingSettings {
+                settingsContent
+            } else {
+                mainContent
+            }
+        }
+        .frame(width: 300)
+
+        if isClearStyle {
+            base
+                .environment(\.colorScheme, .dark)
+                .background(RoundedRectangle(cornerRadius: 22)
+                    .fill(Color.black.opacity(clearDim * 0.06)))
+        } else {
+            base
+                .background(RoundedRectangle(cornerRadius: 22)
+                    .fill(Color.white.opacity(frost * 0.06)))
+                .glassEffect(.clear, in: .rect(cornerRadius: 22))
         }
     }
 
@@ -292,6 +321,7 @@ struct MenuContentView: View {
                     profileRow(profile, index: index)
                 }
             }
+            .overlay(alignment: .topTrailing) { reorderHotkeyColumn }
             .overlay(alignment: .top) { dragGhost }
 
             if isReordering {
@@ -369,24 +399,30 @@ struct MenuContentView: View {
             toastBanner
 
             VStack(alignment: .leading, spacing: 8) {
+                Text(L("Style", "样式"))
+                    .font(.subheadline)
+                Picker("", selection: $panelStyle) {
+                    Text(L("Blur", "模糊")).tag("blur")
+                    Text(L("Clear", "透明")).tag("clear")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
                 Text(L("Frost", "磨砂"))
                     .font(.subheadline)
+                    .padding(.top, 4)
                 HStack(spacing: 8) {
-                    Slider(value: $frost, in: 0...10)
-                    Text(String(format: "%.1f", frost))
+                    Slider(value: activeFrost, in: 0...10)
+                    Text(String(format: "%.1f", activeFrost.wrappedValue))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .frame(width: 30, alignment: .trailing)
                 }
                 HStack {
                     Spacer()
-                    Button(L("Default", "默认")) { frost = Self.frostDefault }
-                        .buttonStyle(.plain)
-                        .padding(.vertical, 4).padding(.horizontal, 10)
-                        .bubble(999)
-                    Button(L("Save", "保存")) {
-                        showingSettings = false
-                        showToast(L("Saved", "已保存"))
+                    Button(L("Default", "默认")) {
+                        activeFrost.wrappedValue =
+                            isClearStyle ? Self.clearDimDefault : Self.frostDefault
                     }
                     .buttonStyle(.plain)
                     .padding(.vertical, 4).padding(.horizontal, 10)
@@ -412,6 +448,13 @@ struct MenuContentView: View {
             .padding(.horizontal, 10)
         }
         .padding(.bottom, 10)
+    }
+
+    /// The frost slider drives only the selected style's level.
+    private var activeFrost: Binding<Double> {
+        Binding(
+            get: { isClearStyle ? clearDim : frost },
+            set: { if isClearStyle { clearDim = $0 } else { frost = $0 } })
     }
 
     private func L(_ en: String, _ zh: String) -> String {
@@ -442,6 +485,7 @@ struct MenuContentView: View {
             profileButton(
                 title: profile.name,
                 subtitle: subtitle(for: profile),
+                shortcut: HotkeyManager.label(forIndex: index),
                 enabled: applicable,
                 hovered: hoveredID == profile.id,
                 thumb: ArrangementThumbView(profile: profile)
@@ -543,6 +587,25 @@ struct MenuContentView: View {
         .frame(height: 54)
     }
 
+    /// Fixed ⌃⌘n column shown while reordering. It sits outside the rows,
+    /// so the badges stay glued to their slots while rows move — showing
+    /// that hotkeys belong to positions, not to presets.
+    @ViewBuilder
+    private var reorderHotkeyColumn: some View {
+        if isReordering {
+            VStack(spacing: 8) {
+                ForEach(0..<store.profiles.count, id: \.self) { index in
+                    Text(HotkeyManager.label(forIndex: index) ?? " ")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(height: 54)
+                }
+            }
+            .padding(.trailing, 48)
+            .allowsHitTesting(false)
+        }
+    }
+
     /// Floating copy of the dragged row, following the cursor.
     @ViewBuilder
     private var dragGhost: some View {
@@ -584,7 +647,7 @@ struct MenuContentView: View {
     }
 
     private func profileButton(
-        title: String, subtitle: String?, enabled: Bool, hovered: Bool,
+        title: String, subtitle: String?, shortcut: String?, enabled: Bool, hovered: Bool,
         thumb: ArrangementThumbView, action: @escaping () -> Void
     ) -> some View {
         // Not .disabled: grayed rows must stay draggable for reordering,
@@ -594,10 +657,11 @@ struct MenuContentView: View {
                 thumb.frame(width: 72, height: 46)
 
                 VStack(alignment: .leading, spacing: 2) {
+                    // Fixed size: long names wrap to two lines, then
+                    // truncate — the font never shrinks.
                     Text(title)
                         .font(.body)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.85)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                     if let subtitle {
@@ -608,6 +672,14 @@ struct MenuContentView: View {
                 }
 
                 Spacer()
+
+                // Hotkey badge, with breathing room before the … menu.
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 26)
+                }
             }
             .contentShape(Rectangle())
             .padding(.horizontal, 10)
@@ -658,23 +730,33 @@ struct MenuContentView: View {
                 .buttonStyle(.plain)
                 .bubble(999)
 
-                // Connection status: green when externals are detected.
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
-                        .frame(width: 7, height: 7)
-                    Text(language == "zh" ? "已连接 \(externalCount) 个外接屏"
-                                          : "\(externalCount) external\(externalCount == 1 ? "" : "s") connected")
-                        .font(.caption)
-                        .foregroundStyle(externalCount > 0 ? .green : .secondary)
-                }
-                .padding(.leading, 10)
+                connectionStatus
+                    .padding(.leading, 10)
             }
 
             Spacer()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 6)
+    }
+
+    private var statusText: String {
+        language == "zh" ? "已连接 \(externalCount) 个外接屏"
+                         : "\(externalCount) external\(externalCount == 1 ? "" : "s") connected"
+    }
+
+    /// Connection status: plain line — the dot carries the green, the
+    /// caption uses the style's secondary color so it reads in both
+    /// panel styles.
+    private var connectionStatus: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
+                .frame(width: 7, height: 7)
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - Save current as profile
@@ -696,7 +778,7 @@ struct MenuContentView: View {
         )
     }
 
-    /// Names in the built-in convention ("Dual external, built-in right"),
+    /// Names in the built-in convention ("2 externals, built-in right"),
     /// derived from the current arrangement; (1), (2)… appended when taken.
     private func suggestedProfileName() -> String {
         let base = Self.arrangementName(for: service.displays)
@@ -713,9 +795,7 @@ struct MenuContentView: View {
         var parts: [String] = []
         switch externals.count {
         case 0: break
-        case 1: parts.append("Single external")
-        case 2: parts.append("Dual external")
-        case 3: parts.append("Triple external")
+        case 1: parts.append("1 external")
         default: parts.append("\(externals.count) externals")
         }
         if let builtin = displays.first(where: { $0.isBuiltin && $0.mirrorSourceID == nil }) {

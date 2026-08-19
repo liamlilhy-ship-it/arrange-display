@@ -49,9 +49,9 @@ enum Preset: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .externalAboveBuiltin: return "External above, built-in below"
-        case .dualExternalBuiltinRight: return "Dual external, built-in right"
-        case .dualExternalBuiltinBottom: return "Dual external, built-in bottom"
+        case .externalAboveBuiltin: return "1 external, built-in bottom"
+        case .dualExternalBuiltinRight: return "2 externals, built-in right"
+        case .dualExternalBuiltinBottom: return "2 externals, built-in bottom"
         }
     }
 

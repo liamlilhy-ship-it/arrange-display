@@ -2,6 +2,21 @@ import SwiftUI
 
 struct DisplayManagerApp: App {
     init() {
+        let service = DisplayService()
+        let store = ProfileStore()
+        store.seedBuiltinLayouts()
+        _service = StateObject(wrappedValue: service)
+        _store = StateObject(wrappedValue: store)
+        hotkeys = HotkeyManager(store: store, service: service)
+
+        // Debug: DM_HOTKEY_TOAST=<text> shows the hotkey toast on launch,
+        // so it can be screenshotted without pressing a hotkey.
+        if let text = ProcessInfo.processInfo.environment["DM_HOTKEY_TOAST"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                HotkeyToast.show(text)
+            }
+        }
+
         // Debug: DM_OPEN_PANEL=1 auto-opens the menu bar panel after launch
         // so the design can be screenshotted without a manual click.
         if ProcessInfo.processInfo.environment["DM_OPEN_PANEL"] != nil {
@@ -24,12 +39,10 @@ struct DisplayManagerApp: App {
         }
     }
 
-    @StateObject private var service = DisplayService()
-    @StateObject private var store = {
-        let store = ProfileStore()
-        store.seedBuiltinLayouts()
-        return store
-    }()
+    @StateObject private var service: DisplayService
+    @StateObject private var store: ProfileStore
+    // Global ⌃⌘1–9 preset hotkeys, alive for the app's lifetime.
+    private let hotkeys: HotkeyManager
 
     var body: some Scene {
         MenuBarExtra("Display Manager", systemImage: "display.2") {
