@@ -8,6 +8,10 @@ struct DisplayManagerApp: App {
         _service = StateObject(wrappedValue: service)
         _store = StateObject(wrappedValue: store)
         hotkeys = HotkeyManager(store: store, service: service)
+        // Keep the login-item registration in step with the setting
+        // (on by default) every launch.
+        LoginItem.sync(
+            enabled: UserDefaults.standard.object(forKey: "launchAtLogin") as? Bool ?? true)
 
         // Debug: DM_HOTKEY_TOAST=<text> shows the hotkey toast on launch,
         // so it can be screenshotted without pressing a hotkey.

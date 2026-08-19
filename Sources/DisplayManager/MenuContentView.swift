@@ -229,6 +229,7 @@ struct MenuContentView: View {
     @AppStorage("frostLevel") private var frost = 1.4
     @AppStorage("clearDimLevel") private var clearDim = 6.5
     @AppStorage("language") private var language = "en"
+    @AppStorage("launchAtLogin") private var launchAtLogin = true
     @State private var showingSettings =
         ProcessInfo.processInfo.environment["DM_OPEN_SETTINGS"] != nil
 
@@ -428,6 +429,18 @@ struct MenuContentView: View {
                     .padding(.vertical, 4).padding(.horizontal, 10)
                     .bubble(999)
                 }
+            }
+            .padding(10)
+            .bubble(16)
+            .padding(.horizontal, 10)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(L("Launch at login", "登录时自动启动"), isOn: $launchAtLogin)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        LoginItem.sync(enabled: enabled)
+                    }
             }
             .padding(10)
             .bubble(16)
