@@ -311,7 +311,7 @@ struct MenuContentView: View {
                 }
                 .padding(.horizontal, 12)
             } else {
-                saveCurrentSection
+                currentSection
             }
 
             if let errorMessage {
@@ -332,17 +332,6 @@ struct MenuContentView: View {
                 .bubble(999)
 
                 Spacer()
-
-                // Connection status: green when externals are detected.
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
-                        .frame(width: 7, height: 7)
-                    Text(language == "zh" ? "\(externalCount) 个外接屏"
-                                          : "\(externalCount) external\(externalCount == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(externalCount > 0 ? .green : .secondary)
-                }
 
                 Button {
                     NSApp.terminate(nil)
@@ -631,37 +620,80 @@ struct MenuContentView: View {
         .padding(.horizontal, 10)
     }
 
+    // MARK: - Current arrangement
+
+    /// "Current" section: a live thumbnail of what the screens look like
+    /// right now (no bubble, no name), with the connection status and the
+    /// save button beside it; only the save button highlights on hover.
+    private var currentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("Current", "当前"))
+                .font(.headline)
+                .padding(.horizontal, 12)
+            // While naming, the editor's live thumbnail already shows the
+            // current arrangement, so the card would be a duplicate.
+            if isNamingNewProfile {
+                saveCurrentSection
+            } else {
+                currentRow
+            }
+        }
+    }
+
+    private var currentRow: some View {
+        HStack(spacing: 10) {
+            ArrangementThumbView(profile: .capture(name: "", displays: service.displays))
+                .frame(width: 72, height: 46)
+
+            // Nudged right of the preset names' alignment line.
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    newProfileName = suggestedProfileName()
+                    isNamingNewProfile = true
+                } label: {
+                    Label(L("Save as Preset…", "存为配置…"), systemImage: "plus.circle")
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                }
+                .buttonStyle(.plain)
+                .bubble(999)
+
+                // Connection status: green when externals are detected.
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
+                        .frame(width: 7, height: 7)
+                    Text(language == "zh" ? "已连接 \(externalCount) 个外接屏"
+                                          : "\(externalCount) external\(externalCount == 1 ? "" : "s") connected")
+                        .font(.caption)
+                        .foregroundStyle(externalCount > 0 ? .green : .secondary)
+                }
+                .padding(.leading, 10)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 6)
+    }
+
     // MARK: - Save current as profile
 
-    @ViewBuilder
+    /// Naming editor shown in place of the current-arrangement card;
+    /// its live thumbnail is the preview of what will be saved.
     private var saveCurrentSection: some View {
-        if isNamingNewProfile {
-            // Live preview of what will be saved: the current arrangement.
-            ProfileNameEditor(
-                thumb: ArrangementThumbView(profile: .capture(name: "", displays: service.displays)),
-                text: $newProfileName,
-                warning: $nameWarning,
-                limit: Self.nameLimit,
-                onCommit: commitNewProfile,
-                onCancel: {
-                    isNamingNewProfile = false
-                    newProfileName = ""
-                    nameWarning = nil
-                }
-            )
-        } else {
-            Button {
-                newProfileName = suggestedProfileName()
-                isNamingNewProfile = true
-            } label: {
-                Label(L("Save Current as Preset…", "将当前排列存为配置…"), systemImage: "plus.circle")
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 12)
+        ProfileNameEditor(
+            thumb: ArrangementThumbView(profile: .capture(name: "", displays: service.displays)),
+            text: $newProfileName,
+            warning: $nameWarning,
+            limit: Self.nameLimit,
+            onCommit: commitNewProfile,
+            onCancel: {
+                isNamingNewProfile = false
+                newProfileName = ""
+                nameWarning = nil
             }
-            .buttonStyle(.plain)
-            .bubble(999)
-            .padding(.horizontal, 10)
-        }
+        )
     }
 
     /// Names in the built-in convention ("Dual external, built-in right"),
