@@ -18,16 +18,17 @@ The app is self-signed, so the **first launch** must be: right-click the app →
 
 ## User manual
 
-Click the two-displays icon in the menu bar to open the panel. Click any preset to apply it — a banner confirms, and the green dot in the footer shows how many external monitors are detected.
+Click the two-displays icon in the menu bar to open the panel. Click any preset to apply it — a banner confirms, and the green dot in the Current section shows how many external monitors are detected.
 
 ### Key features
 
 - **One-click presets** — each preset restores screen positions, the main display, mirroring, and each monitor's resolution / scaling / refresh rate
+- **Hotkeys** — ⌃⌘1 through ⌃⌘9 apply the first nine presets from anywhere, no permission prompts; the numbers follow the menu order, each row shows its key, and a floating confirmation appears when the menu is closed
 - **Fits any matching hardware** — a preset applies whenever the connected screen counts match (laptop + N externals); externals are assigned left-to-right and positions scale to the real monitor sizes
 - **Exact-monitor memory** — when the very monitors a preset was saved with are connected, each one silently gets its remembered position and display mode back
-- **Save current setup** — "Save Current as Preset…" captures the live arrangement with a preview thumbnail and an auto-suggested name
+- **Current section** — a live thumbnail of the present arrangement with the external-monitor count; "Save as Preset…" captures it with an auto-suggested name
 - **Organize** — ⋯ on any row (or right-click) for Reorder / Rename / Delete; duplicate names are rejected with a warning
-- **Liquid Glass panel** — translucent glass design with hover highlights; frost intensity adjustable in Settings (gear icon)
+- **Two panel styles** — Blur (translucent Liquid Glass, adjustable frost) or Clear (blur-free dark panel, adjustable transparency), switched in Settings (gear icon)
 - **English / 中文** — switch the interface language in Settings
 - **Display Settings… shortcut** — jumps straight to System Settings → Displays
 
