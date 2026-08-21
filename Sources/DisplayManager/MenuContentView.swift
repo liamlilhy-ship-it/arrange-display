@@ -1,21 +1,88 @@
+import ObjectiveC
 import SwiftUI
+
+/// Trims the system rim off the panel window. The outermost point of the
+/// window carries a glass edge highlight the window server composites
+/// above our content — a light hairline no fill of ours can cover. It is
+/// clipped by the window's corner mask, so hand AppKit a mask inset by
+/// that point and the rim goes with it. Clear style only: Blur wants the
+/// system edge on its glass sheet.
+private enum PanelRim {
+    /// Width of the highlight, measured off a screenshot: two device
+    /// pixels on a 2x display.
+    static let inset: CGFloat = 1
+
+    private static let selector = NSSelectorFromString("_cornerMask")
+    private static var original: IMP?
+    private static var trims = false
+
+    /// Installs the mask override (once per process) and refreshes the
+    /// window when the style switches.
+    static func set(trims wanted: Bool, on window: NSWindow) {
+        install(on: window)
+        guard original != nil, wanted != trims else { return }
+        trims = wanted
+        let changed = NSSelectorFromString("_cornerMaskChanged")
+        if window.responds(to: changed) { _ = window.perform(changed) }
+    }
+
+    /// Replaces the window class's mask getter with one that returns the
+    /// inset mask while trimming, and the window's own mask otherwise.
+    /// If the selector ever goes away, nothing is installed and the panel
+    /// keeps its stock edge.
+    private static func install(on window: NSWindow) {
+        guard original == nil, let cls = object_getClass(window),
+              let method = class_getInstanceMethod(cls, selector) else { return }
+        original = method_getImplementation(method)
+        let block: @convention(block) (AnyObject) -> NSImage? = { window in
+            guard trims else {
+                typealias Getter = @convention(c) (AnyObject, Selector) -> NSImage?
+                guard let original else { return nil }
+                return unsafeBitCast(original, to: Getter.self)(window, selector)
+            }
+            return insetMask
+        }
+        class_replaceMethod(cls, selector, imp_implementationWithBlock(block),
+                            method_getTypeEncoding(method))
+    }
+
+    /// The window's own mask is a 33x33 nine-part image at radius 16 —
+    /// 16pt caps around a 1pt stretched centre. Same, inset: the caps
+    /// carry the margin, so it holds along the straight edges too.
+    private static let insetMask: NSImage = {
+        let radius: CGFloat = 16
+        let image = NSImage(size: NSSize(width: 33, height: 33), flipped: false) { rect in
+            NSColor.white.setFill()
+            NSBezierPath(roundedRect: rect.insetBy(dx: inset, dy: inset),
+                         xRadius: radius - inset, yRadius: radius - inset).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }()
+}
 
 /// Makes the MenuBarExtra panel window transparent so the desktop shows
 /// through the content's own glass sheet — the Control Center look. The
 /// system panel draws its background with an effect view in the window
 /// frame; hide it (but never the content's own ancestors).
 struct TransparentPanel: NSViewRepresentable {
+    /// Clear style trims the system rim; carried here so a style switch
+    /// re-runs the update.
+    var trimsRim: Bool
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { Self.clearBackground(around: view) }
+        DispatchQueue.main.async { clearBackground(around: view) }
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { Self.clearBackground(around: view) }
+        DispatchQueue.main.async { clearBackground(around: view) }
     }
 
-    private static func clearBackground(around view: NSView) {
+    private func clearBackground(around view: NSView) {
         guard let window = view.window, let content = window.contentView else { return }
         window.isOpaque = false
         window.backgroundColor = .clear
@@ -39,6 +106,7 @@ struct TransparentPanel: NSViewRepresentable {
         // it reads as a light ring around the sheet, so drop it.
         window.hasShadow = false
         window.invalidateShadow()
+        PanelRim.set(trims: trimsRim, on: window)
     }
 }
 
@@ -256,7 +324,7 @@ struct MenuContentView: View {
 
     var body: some View {
         styledPanel
-        .background(TransparentPanel())
+        .background(TransparentPanel(trimsRim: isClearStyle))
         // Debug: DM_TOAST=<text> shows a toast on open, for screenshots.
         .onAppear {
             if let text = ProcessInfo.processInfo.environment["DM_TOAST"] {
