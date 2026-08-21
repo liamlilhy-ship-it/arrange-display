@@ -46,13 +46,12 @@ struct TransparentPanel: NSViewRepresentable {
 private struct Bubble: ViewModifier {
     var radius: CGFloat
     var highlight: Bool
-    // Liam's tuned values, baked in.
-    private let fill = 0.06
-    private let rim = 0.65
-    // Hover brightening reads stronger without the glass sheet behind
-    // it, so the clear style uses a gentler value.
+    // Liam's tuned values, baked in per style (Clear has no glass sheet
+    // behind it, so everything reads stronger and sits lower).
     @AppStorage("panelStyle") private var panelStyle = "blur"
-    private var hover: Double { panelStyle == "clear" ? 0.18 : 0.30 }
+    private var fill: Double { panelStyle == "clear" ? 0.015 : 0.034 }
+    private var rim: Double { panelStyle == "clear" ? 0.076 : 0.030 }
+    private var hover: Double { panelStyle == "clear" ? 0.040 : 0.200 }
     // Every bubble brightens under the pointer on its own.
     @State private var isHovering = false
 
@@ -220,14 +219,14 @@ struct MenuContentView: View {
     @State private var hoveredMenuID: UUID?
 
     // Settings: panel style and per-style frost levels (0–10), plus UI
-    // language. "blur" is the glass sheet with a white wash (default 1.4
-    // reproduces the old .regular look — screenshot-calibrated). "clear"
+    // language. "blur" is the glass sheet with a white wash; "clear"
     // drops the glass entirely: a black dim wash and forced white text.
-    static let frostDefault = 1.4
-    static let clearDimDefault = 6.5
+    // Defaults are Liam's tuned values.
+    static let frostDefault = 1.0
+    static let clearDimDefault = 8.2
     @AppStorage("panelStyle") private var panelStyle = "blur"
-    @AppStorage("frostLevel") private var frost = 1.4
-    @AppStorage("clearDimLevel") private var clearDim = 6.5
+    @AppStorage("frostLevel") private var frost = 1.0
+    @AppStorage("clearDimLevel") private var clearDim = 8.2
     @AppStorage("language") private var language = "en"
     @AppStorage("launchAtLogin") private var launchAtLogin = true
     @State private var showingSettings =
