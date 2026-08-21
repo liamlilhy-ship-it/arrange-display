@@ -256,7 +256,8 @@ struct MenuContentView: View {
         styledPanel
         .overlay(
             RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                // The rim reads as a white frame on the dark Clear sheet.
+                .strokeBorder(Color.white.opacity(isClearStyle ? 0 : 0.25), lineWidth: 1)
                 .allowsHitTesting(false))
         .background(TransparentPanel())
         // Debug: DM_TOAST=<text> shows a toast on open, for screenshots.
@@ -285,8 +286,12 @@ struct MenuContentView: View {
         if isClearStyle {
             base
                 .environment(\.colorScheme, .dark)
+                // Overshoot the bounds so the fill reaches the window's own
+                // rounded corners; otherwise the system sheet peeks out as a
+                // light frame. The window shape clips the excess.
                 .background(RoundedRectangle(cornerRadius: 22)
-                    .fill(Color.black.opacity(clearDim * 0.06)))
+                    .fill(Color.black.opacity(clearDim * 0.06))
+                    .padding(-4))
         } else {
             base
                 .background(RoundedRectangle(cornerRadius: 22)
@@ -753,22 +758,30 @@ struct MenuContentView: View {
         .padding(.vertical, 6)
     }
 
-    private var statusText: String {
-        language == "zh" ? "已连接 \(externalCount) 个外接屏"
-                         : "\(externalCount) external\(externalCount == 1 ? "" : "s") connected"
+    /// Connection status: two fixed lines — the external count and the
+    /// laptop screen — with a green dot when present, gray when not
+    /// (e.g. clamshell mode). Secondary captions read in both styles.
+    private var connectionStatus: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            statusLine(
+                on: externalCount > 0,
+                text: language == "zh" ? "\(externalCount) 个外接屏"
+                                       : "\(externalCount) external\(externalCount == 1 ? "" : "s")")
+            statusLine(
+                on: service.displays.contains(where: \.isBuiltin),
+                text: L("Laptop", "笔记本"))
+        }
     }
 
-    /// Connection status: plain line — the dot carries the green, the
-    /// caption uses the style's secondary color so it reads in both
-    /// panel styles.
-    private var connectionStatus: some View {
+    private func statusLine(on: Bool, text: String) -> some View {
         HStack(spacing: 5) {
             Circle()
-                .fill(externalCount > 0 ? Color.green : Color.secondary.opacity(0.5))
+                .fill(on ? Color.green : Color.secondary.opacity(0.5))
                 .frame(width: 7, height: 7)
-            Text(statusText)
+            Text(text)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
