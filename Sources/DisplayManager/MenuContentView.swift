@@ -35,6 +35,9 @@ struct TransparentPanel: NSViewRepresentable {
             v.subviews.forEach(walk)
         }
         if let frame = content.superview { walk(frame) }
+        // The window shadow carries a thin light bezel line along the edge;
+        // it reads as a white frame on the dark Clear sheet, so drop it.
+        window.hasShadow = UserDefaults.standard.string(forKey: "panelStyle") != "clear"
         window.invalidateShadow()
     }
 }
@@ -285,10 +288,13 @@ struct MenuContentView: View {
         if isClearStyle {
             base
                 .environment(\.colorScheme, .dark)
-                // Overshoot the bounds so the fill reaches the window's own
-                // rounded corners; otherwise the system sheet peeks out as a
-                // light frame. The window shape clips the excess.
-                .background(RoundedRectangle(cornerRadius: 22)
+                // The panel window's own corner radius is 16 (its private
+                // _cornerMask is a 33×33 image), smaller than the 22 the
+                // Blur sheet uses. Match it — outset 4pt at radius 20 so
+                // the fill reaches every corner tip; the window shape clips
+                // the excess. Otherwise the system sheet peeks out as a
+                // light frame.
+                .background(RoundedRectangle(cornerRadius: 20)
                     .fill(Color.black.opacity(clearDim * 0.06))
                     .padding(-4))
         } else {
