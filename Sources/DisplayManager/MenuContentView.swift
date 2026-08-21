@@ -36,8 +36,8 @@ struct TransparentPanel: NSViewRepresentable {
         }
         if let frame = content.superview { walk(frame) }
         // The window shadow carries a thin light bezel line along the edge;
-        // it reads as a white frame on the dark Clear sheet, so drop it.
-        window.hasShadow = UserDefaults.standard.string(forKey: "panelStyle") != "clear"
+        // it reads as a light ring around the sheet, so drop it.
+        window.hasShadow = false
         window.invalidateShadow()
     }
 }
@@ -256,11 +256,6 @@ struct MenuContentView: View {
 
     var body: some View {
         styledPanel
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                // The rim reads as a white frame on the dark Clear sheet.
-                .strokeBorder(Color.white.opacity(isClearStyle ? 0 : 0.25), lineWidth: 1)
-                .allowsHitTesting(false))
         .background(TransparentPanel())
         // Debug: DM_TOAST=<text> shows a toast on open, for screenshots.
         .onAppear {
