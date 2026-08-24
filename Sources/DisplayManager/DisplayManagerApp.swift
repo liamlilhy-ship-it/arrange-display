@@ -15,6 +15,16 @@ struct DisplayManagerApp: App {
             enabled: UserDefaults.standard.object(forKey: "launchAtLogin") as? Bool ?? true)
         Updater.start()
 
+        // Debug: DM_CHECK_UPDATES=1 runs a user-initiated update check on
+        // launch, so the "up to date" and failure dialogs can be seen without
+        // clicking. Background checks never show errors, so this is the only
+        // way to exercise that path.
+        if ProcessInfo.processInfo.environment["DM_CHECK_UPDATES"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                Updater.checkNow()
+            }
+        }
+
         // Debug: DM_HOTKEY_TOAST=<text> shows the hotkey toast on launch,
         // so it can be screenshotted without pressing a hotkey.
         if let text = ProcessInfo.processInfo.environment["DM_HOTKEY_TOAST"] {
