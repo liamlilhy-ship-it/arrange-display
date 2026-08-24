@@ -7,8 +7,9 @@ swift build -c release
 
 APP="build/DisplayManager.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp .build/release/DisplayManager "$APP/Contents/MacOS/DisplayManager"
 cp -R .build/release/Sparkle.framework "$APP/Contents/Frameworks/"
 
