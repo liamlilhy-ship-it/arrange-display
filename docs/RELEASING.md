@@ -7,9 +7,10 @@ How updates reach users, and what you do each time. Everything here assumes
 
 ```bash
 # 1. bump the version in Resources/Info.plist
-# 2.
-./release.sh
-# 3. copy the two files it names into the website repo, push
+# 2. write docs/release-notes/<version>.html
+# 3.
+DOWNLOAD_URL_PREFIX="https://github.com/liamlilhy-ship-it/arrange-display/releases/download/v<version>/" ./release.sh
+# 4. run the gh release create line it prints, and add the DMG
 ```
 
 That's the whole loop. The rest of this file is detail and recovery.
@@ -81,35 +82,73 @@ keep working.
 
 **3. Publish** — copy the two files it names into the website repo:
 
-| From | To |
+Attach **three** files to a release tagged `v<version>`:
+
+| File | Why |
 |---|---|
-| `releases/ArrangeDisplay-<version>.zip` | `public/downloads/` |
-| `releases/appcast.xml` | `public/` |
+| `releases/ArrangeDisplay-<version>.zip` | what the in-app updater installs |
+| `releases/appcast.xml` | the feed — **required on every release** |
+| `build/ArrangeDisplay.dmg` (`./package-dmg.sh`) | what new users download |
 
-Then update `downloadUrl`, `version` and `approxSizeMB` in `lib/config.ts`,
-and push. Vercel deploys, and the update is live.
-
-Also upload the DMG (`./package-dmg.sh`) wherever you point new users, so
-first-time downloads get the new version too.
+`release.sh` prints the exact `gh release create` command. Omit `appcast.xml`
+and the feed URL 404s for everyone, not just people wanting that version,
+because it always resolves to the newest release.
 
 **4. Check it.** Open the app, gear → Check for Updates…. You should be
 offered the version you just published. This is worth doing every time — it
 is the only end-to-end test of the whole chain.
 
+### The release description must tell first-time downloaders how to open the app
+
+People arriving at a GitHub release have never run the app, so they will hit
+the Gatekeeper block and — unless the release says otherwise — conclude the
+download is broken. Sparkle's release notes are no help here: those are only
+ever seen by people who already have the app installed.
+
+So paste this into the GitHub release description, every release:
+
+```markdown
+### First launch
+
+The app is self-signed, so macOS asks about it **once, on first install**:
+
+1. Double-click the app. macOS says it can't check it for malicious software.
+2. Open **System Settings → Privacy & Security**
+3. Scroll down, click **Open Anyway**, and confirm
+
+Right-click → Open does *not* work for this any more; macOS removed that
+shortcut in Sequoia.
+
+You only do this once. After that, use **Check for Updates…** in Settings and
+updates install without repeating it.
+
+### 首次启动
+
+本应用使用自签名，macOS 只会在**第一次安装时**询问一次：
+
+1. 双击应用。macOS 会提示无法验证是否包含恶意软件。
+2. 打开**系统设置 → 隐私与安全性**
+3. 向下滚动，点击**仍要打开**，然后确认
+
+右键 → 打开 对此已经无效 —— macOS 从 Sequoia 起移除了该快捷方式。
+
+这一步只需做一次。之后请使用设置里的**检查更新…**，更新将不再重复此过程。
+```
+
 ---
 
-## Release notes (optional)
+## Release notes
 
-To make the update dialog show what's new, drop a file next to the zip with
-the same name before running `release.sh`:
+Write them at `docs/release-notes/<version>.html` and `release.sh` copies the
+file next to the archive, where `generate_appcast` picks it up and shows it in
+the update dialog. Without one, users see a version number and nothing else.
 
-```
-releases/ArrangeDisplay-0.2.0.zip
-releases/ArrangeDisplay-0.2.0.html    <- shown in the update dialog
-```
+Plain HTML fragment — no `<html>` or `<body>` tags. Write **English first,
+then Chinese**, separated by an `<hr>`; see `docs/release-notes/1.1.0.html`.
 
-Plain HTML fragment, no `<html>` or `<body>` needed. Without one, users see
-a version number and nothing else.
+These notes are shown only to people who already have the app and are
+updating. First-time downloaders never see them, which is why the first-launch
+steps belong in the GitHub release description instead (above).
 
 ---
 
@@ -251,14 +290,6 @@ Anyone holding it can sign something your users' apps will install and run.
 Generate a new key, ship a new version with it, and treat existing installs
 as compromised — you'd need to tell users directly. Keep it out of the repo,
 out of screenshots, out of chat.
-
-### Checking mainland-China reachability
-
-You can't test this from your own Mac. Free services run pings and fetches
-from mainland nodes — `itdog.cn`, or the various 站长工具 ping tools. Point
-one at your feed URL and your download URL. Worth checking before the first
-release, since the URL is the part you can't take back, and again if users
-report updates never appearing.
 
 ---
 

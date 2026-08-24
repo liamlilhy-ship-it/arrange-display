@@ -65,6 +65,16 @@ rm -f "$archive"
 # code signature a plain zip would mangle.
 ditto -c -k --sequesterRsrc --keepParent build/DisplayManager.app "$archive"
 
+# Release notes, if written: generate_appcast picks up a file sitting next to
+# the archive under the same name, and shows it in the update dialog.
+notes="docs/release-notes/$version.html"
+if [ -f "$notes" ]; then
+    cp "$notes" "$RELEASES/ArrangeDisplay-$version.html"
+    echo "Release notes: $notes"
+else
+    echo "No release notes at $notes — the update dialog will show only a version number."
+fi
+
 # -o is not optional: without it generate_appcast names the output after the
 # last path component of SUFeedURL, which silently produces a stray file.
 "$TOOLS/generate_appcast" -o "$RELEASES/appcast.xml" \
