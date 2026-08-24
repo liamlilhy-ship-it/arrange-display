@@ -15,10 +15,25 @@ final class ProfileStore: ObservableObject {
     }
 
     func load() {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([CustomProfile].self, from: data)
-        else { return }
+        guard let data = try? Data(contentsOf: url) else { return }
+        guard let decoded = try? JSONDecoder().decode([CustomProfile].self, from: data) else {
+            preserveUnreadable()
+            return
+        }
         profiles = decoded.map(Self.normalized)
+    }
+
+    /// A file that exists but won't decode is damaged or from a newer format —
+    /// not an empty list. Left alone it would be overwritten by the next save,
+    /// so keep a copy first. The earliest copy wins: it holds the data from
+    /// before whatever broke.
+    private func preserveUnreadable() {
+        let backup = url.deletingLastPathComponent()
+            .appendingPathComponent("profiles.corrupt.json")
+        if !FileManager.default.fileExists(atPath: backup.path) {
+            try? FileManager.default.copyItem(at: url, to: backup)
+        }
+        NSLog("DisplayManager: profiles.json unreadable; copy kept at \(backup.path)")
     }
 
     /// Older auto-generated names spelled counts out ("Dual external");
