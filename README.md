@@ -14,7 +14,37 @@ One-click macOS display arrangement presets from the menu bar. Save how your mon
 - **[⬇ Download ArrangeDisplay.dmg](https://github.com/liamlilhy-ship-it/arrange-display/releases/latest/download/ArrangeDisplay.dmg)** — open it and drag the app into the Applications shortcut
 - [ArrangeDisplay.zip](https://github.com/liamlilhy-ship-it/arrange-display/releases/latest/download/ArrangeDisplay.zip) (plain zip) · [All releases](https://github.com/liamlilhy-ship-it/arrange-display/releases)
 
-The app is self-signed, so the **first launch** must be: right-click the app → **Open** → **Open**. After that it opens normally.
+### First launch
+
+The app is self-signed, so macOS asks about it — **once, on the first install**:
+
+1. Double-click the app. macOS says it can't check it for malicious software.
+2. Open **System Settings → Privacy & Security**
+3. Scroll down, click **Open Anyway**, and confirm
+
+The app then opens normally, every time after.
+
+(Right-click → **Open** does *not* work for this any more — macOS removed that
+shortcut in Sequoia.)
+
+### Updating
+
+Open the panel → gear icon → **Check for Updates…**
+
+The app never checks, downloads, or installs anything on its own — it only
+looks when you ask it to. If there is a newer version you get its details and
+an Install button; if not, it says so and nothing happens.
+
+Updating this way takes a few seconds and asks nothing else of you:
+
+- **No repeat of the first-launch steps.** The update is installed by the app
+  itself, so macOS does not treat it as a new unknown download.
+- **Your presets and settings are kept.** They live outside the app, so they
+  carry over untouched — layouts, order, names, panel style, and language.
+
+You can always download a fresh copy from the link above instead. That works
+too, but macOS treats it as a brand-new app, so you would repeat the three
+first-launch steps each time. Checking from inside the app avoids that.
 
 ## User manual
 
@@ -52,6 +82,9 @@ Presets that don't fit the currently connected screens appear dimmed until the m
 ./build.sh
 open build/DisplayManager.app
 ```
+
+Publishing a release (signing key, feed URL, the per-release steps) is
+documented in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## CLI (for testing/scripting)
 

@@ -3,3 +3,12 @@ build/
 .DS_Store
 .claude/
 .swiftpm/
+releases/
+
+# Never commit update-signing key material. The PUBLIC key belongs in
+# Info.plist and is safe to publish; the private key lives in the login
+# keychain (or a backup kept outside this repo) and must never land here.
+*private*key*.txt
+*.p8
+*.p12
+*.pem
