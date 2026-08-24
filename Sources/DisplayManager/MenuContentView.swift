@@ -520,6 +520,27 @@ struct MenuContentView: View {
             .padding(.horizontal, 10)
 
             VStack(alignment: .leading, spacing: 8) {
+                Text(L("Updates", "更新"))
+                    .font(.subheadline)
+                HStack {
+                    Text(L("Version \(Updater.currentVersion)",
+                           "版本 \(Updater.currentVersion)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(L("Check for Updates…", "检查更新…")) {
+                        Updater.checkNow()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 4).padding(.horizontal, 10)
+                    .bubble(999)
+                }
+            }
+            .padding(10)
+            .bubble(16)
+            .padding(.horizontal, 10)
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text(L("Language", "语言"))
                     .font(.subheadline)
                 Picker("", selection: $language) {
