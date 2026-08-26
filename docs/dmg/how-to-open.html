@@ -1,0 +1,236 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1760px; height: 900px; }
+  body {
+    font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(160deg, #eef1f6 0%, #e3e8f0 100%);
+    color: #1d1d1f;
+    padding: 48px 56px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .header { text-align: center; margin-bottom: 10px; }
+  .header h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.3px; }
+  .header p { font-size: 19px; color: #5f6570; margin-top: 8px; }
+  .header p b { color: #1d1d1f; font-weight: 600; }
+
+  .stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    margin-top: 34px;
+  }
+
+  /* ---------- step columns ---------- */
+  .step { display: flex; flex-direction: column; align-items: center; }
+  .badge-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .badge {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #0a84ff; color: #fff;
+    font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 8px rgba(10,132,255,.35);
+    flex: none;
+  }
+  .badge-row .cap { font-size: 20px; font-weight: 600; max-width: 420px; line-height: 1.3; }
+  .cap .key { color: #0a84ff; }
+  .subcap { font-size: 16px; color: #6b7280; margin-top: 14px; max-width: 480px; text-align: center; line-height: 1.45; }
+
+  .big-arrow { font-size: 54px; color: #b0b8c6; margin-top: 40px; flex: none; }
+
+  /* ---------- gatekeeper dialog ---------- */
+  .gk {
+    width: 340px;
+    background: rgba(248,248,250,.98);
+    border-radius: 26px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.22), 0 0 0 0.5px rgba(0,0,0,.08);
+    padding: 26px 24px 22px;
+    position: relative;
+    text-align: left;
+  }
+  .gk .help {
+    position: absolute; top: 18px; right: 18px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #e4e4e8; color: #6d6d72;
+    font-size: 17px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gk h2 { font-size: 20px; font-weight: 700; margin: 16px 0 10px; }
+  .gk .body { font-size: 15.5px; line-height: 1.4; color: #3c3c43; }
+  .gk .done {
+    margin-top: 20px; width: 100%;
+    background: #0a84ff; color: #fff;
+    border: none; border-radius: 14px;
+    font-size: 17px; font-weight: 600;
+    padding: 12px 0; text-align: center;
+  }
+
+  /* ---------- system settings window ---------- */
+  .win {
+    width: 780px;
+    background: #f5f5f7;
+    border-radius: 14px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.22), 0 0 0 0.5px rgba(0,0,0,.1);
+    overflow: hidden;
+    display: flex;
+    text-align: left;
+  }
+  .sidebar {
+    width: 230px; flex: none;
+    background: #ececee;
+    padding: 14px 10px 18px;
+    border-right: 0.5px solid rgba(0,0,0,.12);
+  }
+  .lights { display: flex; gap: 7px; margin: 2px 0 14px 6px; }
+  .lights span { width: 12px; height: 12px; border-radius: 50%; }
+  .search {
+    background: #e0e0e3; border-radius: 8px;
+    font-size: 13px; color: #8e8e93;
+    padding: 6px 10px; margin-bottom: 12px;
+  }
+  .side-item {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 14px; padding: 6px 8px; border-radius: 7px;
+    color: #1d1d1f;
+  }
+  .side-item .ic {
+    width: 22px; height: 22px; border-radius: 6px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px;
+  }
+  .side-item.sel { background: #0a84ff; color: #fff; }
+  .side-item.hl { outline: 2.5px solid #e5484d; outline-offset: 2px; }
+
+  .content { flex: 1; padding: 18px 24px 24px; }
+  .content h3 { font-size: 17px; font-weight: 700; text-align: center; margin-bottom: 16px; }
+  .sec-label { font-size: 13px; font-weight: 600; color: #6d6d72; margin: 14px 0 8px 2px; }
+  .card {
+    background: #fff; border-radius: 10px;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,.08);
+  }
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; font-size: 14.5px;
+  }
+  .row + .row { border-top: 0.5px solid rgba(0,0,0,.08); }
+  .row .val { color: #6d6d72; display: flex; align-items: center; gap: 6px; }
+  .blocked { display: block; padding: 14px; }
+  .blocked-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .blocked-top .msg { font-size: 14.5px; line-height: 1.35; }
+  .open-anyway {
+    background: #e9e9eb; border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+    padding: 7px 14px; flex: none;
+    box-shadow: 0 0 0 0.5px rgba(0,0,0,.12);
+    position: relative;
+  }
+  .ring {
+    position: absolute; inset: -7px -9px;
+    border: 3px solid #e5484d; border-radius: 12px;
+  }
+  .blocked .fine {
+    font-size: 12.5px; color: #8e8e93; line-height: 1.4; margin-top: 10px;
+  }
+
+  .footnote {
+    text-align: center; margin-top: 36px;
+    font-size: 16.5px; color: #5f6570;
+  }
+  .footnote b { color: #1d1d1f; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Opening DisplayManager for the first time</h1>
+  <p>The app isn’t notarized by Apple yet, so macOS shows a warning on first launch. It’s safe to continue — <b>you only do this once.</b></p>
+</div>
+
+<div class="stage">
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="badge-row">
+      <div class="badge">1</div>
+      <div class="cap">Open the app — this dialog appears.<br>Click <span class="key">Done</span></div>
+    </div>
+    <div class="gk">
+      <div class="help">?</div>
+      <svg width="86" height="86" viewBox="0 0 86 86">
+        <path d="M14 34 L43 12 L72 34 L72 62 Q72 70 64 70 L22 70 Q14 70 14 62 Z" fill="#a8adb5"/>
+        <path d="M14 34 L43 12 L72 34 L72 40 L14 40 Z" fill="#8e939c"/>
+        <circle cx="43" cy="48" r="14" fill="#6f747d"/>
+        <circle cx="43" cy="48" r="9" fill="#4a4f58"/>
+        <circle cx="43" cy="48" r="3.5" fill="#a8adb5"/>
+        <g transform="translate(48,44)">
+          <path d="M16 2 L30 26 Q31 29 27 29 L5 29 Q1 29 2 26 Z" fill="#f7b500" stroke="#fff" stroke-width="2.5"/>
+          <rect x="14.6" y="10" width="3" height="10" rx="1.5" fill="#7a5b00"/>
+          <circle cx="16.1" cy="24" r="1.9" fill="#7a5b00"/>
+        </g>
+      </svg>
+      <h2>“DisplayManager” Not Opened</h2>
+      <div class="body">Apple could not verify “DisplayManager” is free of malware that may harm your Mac or compromise your privacy.</div>
+      <div class="done">Done</div>
+    </div>
+    <div class="subcap">Don’t worry — the app isn’t damaged.<br>macOS just hasn’t verified it yet.</div>
+  </div>
+
+  <div class="big-arrow">➜</div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="badge-row">
+      <div class="badge">2</div>
+      <div class="cap">Go to <span class="key">System Settings → Privacy &amp; Security</span>, scroll down and click <span class="key">Open Anyway</span></div>
+    </div>
+    <div class="win">
+      <div class="sidebar">
+        <div class="lights">
+          <span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span>
+        </div>
+        <div class="search">&#128269;&nbsp; Search</div>
+        <div class="side-item"><span class="ic" style="background:#ff3b30">&#128276;</span>Notifications</div>
+        <div class="side-item"><span class="ic" style="background:#ff2d55">&#128266;</span>Sound</div>
+        <div class="side-item"><span class="ic" style="background:#5e5ce6">&#127769;</span>Focus</div>
+        <div class="side-item"><span class="ic" style="background:#af52de">&#8987;</span>Screen Time</div>
+        <div class="side-item"><span class="ic" style="background:#1d1d1f">&#128274;</span>Lock Screen</div>
+        <div class="side-item sel hl"><span class="ic" style="background:#0a84ff">&#9995;</span>Privacy &amp; Security</div>
+        <div class="side-item"><span class="ic" style="background:#ff2d55">&#9757;</span>Touch ID &amp; Password</div>
+        <div class="side-item"><span class="ic" style="background:#34c759">&#128101;</span>Users &amp; Groups</div>
+      </div>
+      <div class="content">
+        <h3>Privacy &amp; Security</h3>
+        <div class="sec-label">Security</div>
+        <div class="card">
+          <div class="row">
+            <span>Allow applications from</span>
+            <span class="val">App Store &amp; Known Developers &nbsp;&#8645;</span>
+          </div>
+        </div>
+        <div class="card blocked" style="margin-top:12px">
+          <div class="blocked-top">
+            <div class="msg">“DisplayManager” was blocked to protect your&nbsp;Mac.</div>
+            <div class="open-anyway">Open Anyway<div class="ring"></div></div>
+          </div>
+          <div class="fine">Apple could not verify “DisplayManager” is free of malware that may harm your Mac or compromise your privacy.</div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="row"><span>FileVault</span><span class="val">Off &nbsp;&#8250;</span></div>
+          <div class="row"><span>Lockdown Mode</span><span class="val">&#8250;</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="subcap">macOS asks for your password, then shows one more confirmation — click <b>Open Anyway</b> again and the app launches.</div>
+  </div>
+
+</div>
+
+<div class="footnote">After this one-time approval, <b>DisplayManager opens normally</b> — no more warnings, and updates install without repeating these steps.</div>
+
+</body>
+</html>
