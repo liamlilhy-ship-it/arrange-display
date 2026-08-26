@@ -125,3 +125,7 @@ documented in [docs/RELEASING.md](docs/RELEASING.md).
 .build/release/DisplayManager profiles         # list saved presets
 .build/release/DisplayManager profile <name>   # apply a saved preset
 ```
+
+## License
+
+[MIT](LICENSE)
