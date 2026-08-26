@@ -1,5 +1,7 @@
 # Arrange Display
 
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Farrange-display-web.vercel.app%2Fapi%2Fbadge%2Fdownloads)](https://github.com/liamlilhy-ship-it/arrange-display/releases)
+
 One-click macOS display arrangement presets from the menu bar. Save how your monitors are arranged — positions, main display, mirroring, resolution and refresh rate — and restore any setup with a single click, without ever opening System Settings.
 
 <img src="docs/panel.png" width="330" alt="Arrange Display menu bar panel">
